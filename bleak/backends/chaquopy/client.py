@@ -13,16 +13,15 @@ from android.bluetooth import (
     BluetoothProfile,
 )
 from android.os import Build
-from java import Override, jarray, jbyte, jclass, jint, jvoid, static_proxy
+from java import Override, jarray, jbyte, jint, jvoid, static_proxy
 from java.util import UUID
 from org.beeware.android import MainActivity
 
 from bleak.backends.chaquopy import (
-    BLEDevice,
     BLEGattService,
-    bleekWareCharacteristicNotFoundError,
-    bleekWareError,
 )
+from bleak.backends.device import BLEDevice
+from bleak.exc import BleakCharacteristicNotFoundError, BleakError
 
 received_data = []
 status_message = []
@@ -156,9 +155,9 @@ class BleakClientChaquopy:  # (BaseBleakClient):
         """Connect to a GATT server."""
         self.adapter = BluetoothAdapter.getDefaultAdapter()
         if self.adapter is None:
-            raise bleekWareError('Bluetooth is not supported on this device')
+            raise BleakError('Bluetooth is not supported on this device')
         if self.adapter.getState() != BluetoothAdapter.STATE_ON:
-            raise bleekWareError('Bluetooth is turned off')
+            raise BleakError('Bluetooth is turned off')
 
         if self.gatt is not None:
             self.gatt.connect()
@@ -209,7 +208,7 @@ class BleakClientChaquopy:  # (BaseBleakClient):
         ``callback`` can be a usual or async callback method
         """
         if not self.is_connected or self.gatt is None:
-            raise bleekWareError('Client not connected')
+            raise BleakError('Client not connected')
 
         self.notification_callback = callback
         characteristic = self._find_characteristic(uuid)
@@ -239,7 +238,7 @@ class BleakClientChaquopy:  # (BaseBleakClient):
     async def stop_notify(self, uuid):
         """Stop notification of a notifying characteristic."""
         if not self.is_connected or self.gatt is None:
-            raise bleekWareError('Client not connected')
+            raise BleakError('Client not connected')
         
         characteristic = self._find_characteristic(uuid)
         if characteristic:
@@ -259,7 +258,7 @@ class BleakClientChaquopy:  # (BaseBleakClient):
         as string.
         """
         if not self.is_connected or self.gatt is None:
-            raise bleekWareError('Client not connected')
+            raise BleakError('Client not connected')
     
         characteristic = self._find_characteristic(uuid)
         if characteristic:
@@ -268,7 +267,7 @@ class BleakClientChaquopy:  # (BaseBleakClient):
                 await asyncio.sleep(0.1)
             return bytearray(received_data.pop())
         else:
-            raise bleekWareCharacteristicNotFoundError(uuid)
+            raise BleakCharacteristicNotFoundError(uuid)
 
     async def write_gatt_char(self, uuid, data, response=None):
         """Write to a characteristic.
@@ -277,7 +276,7 @@ class BleakClientChaquopy:  # (BaseBleakClient):
         as string.
         """
         if not self.is_connected or self.gatt is None:
-            raise bleekWareError('Client not connected')
+            raise BleakError('Client not connected')
 
         characteristic = self._find_characteristic(uuid)
         if characteristic:
@@ -295,7 +294,7 @@ class BleakClientChaquopy:  # (BaseBleakClient):
                         BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                     )
                 else:
-                    raise bleekWareError("unknown property")
+                    raise BleakError("unknown property")
             elif response:
                 write_type = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
             else:
@@ -308,7 +307,7 @@ class BleakClientChaquopy:  # (BaseBleakClient):
             else:
                 self.gatt.writeCharacteristic(characteristic, data, write_type)
         else:
-            raise bleekWareCharacteristicNotFoundError(uuid)
+            raise BleakCharacteristicNotFoundError(uuid)
 
     @property
     def address(self):
@@ -329,7 +328,7 @@ class BleakClientChaquopy:  # (BaseBleakClient):
         As list of BLEGattService objects.
         """
         if not self._services:
-            raise bleekWareError(
+            raise BleakError(
                 'Service Discovery has not been performed yet'
             )
 

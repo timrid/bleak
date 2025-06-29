@@ -4,11 +4,13 @@ import time
 
 from android.bluetooth import BluetoothAdapter
 from android.bluetooth.le import ScanCallback, ScanResult, ScanSettings
-from java import Override, jclass, jint, jvoid, static_proxy
+from java import Override, jint, jvoid, static_proxy
 from java.util import HashMap
 from org.beeware.android import MainActivity
 
-from bleak.backends.chaquopy import BLEDevice, bleekWareError, check_for_permissions
+from bleak.backends.chaquopy import check_for_permissions
+from bleak.backends.device import BLEDevice
+from bleak.exc import BleakError
 
 scan_result = {}
 async_callbacks = set()  # To keep reference for callbacks
@@ -177,7 +179,7 @@ class BleakScannerChaquopy:  # (BaseBleakScanner):
     async def start(self):
         """Start a scan for BLE devices."""
         if BleakScannerChaquopy.scanner is not None:
-            raise bleekWareError(
+            raise BleakError(
                 'A BleakScanner is already scanning on this adapter.'
             )
 
@@ -189,11 +191,11 @@ class BleakScannerChaquopy:  # (BaseBleakScanner):
 
         self.adapter = BluetoothAdapter.getDefaultAdapter()
         if self.adapter is None:
-            raise bleekWareError(
+            raise BleakError(
                 'Bluetooth is not supported on this hardware platform'
             )
         if self.adapter.getState() != BluetoothAdapter.STATE_ON:
-            raise bleekWareError('Bluetooth is not turned on')
+            raise BleakError('Bluetooth is not turned on')
 
         self.leScanner = self.adapter.getBluetoothLeScanner()
         BleakScannerChaquopy.scanner = self

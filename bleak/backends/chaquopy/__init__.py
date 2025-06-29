@@ -13,58 +13,9 @@ MIT license
 
 from android import Manifest
 from android.app import Activity
-from android.bluetooth import BluetoothGattCharacteristic, BluetoothGattService
+from android.bluetooth import BluetoothGattService
 from android.content.pm import PackageManager
 from android.os import Build
-from java import jclass
-
-
-class BLEDevice:
-    """Class to hold data of a BLE device.
-
-    Note: 'details' is the OS native device.
-    """
-
-    def __init__(self, address, name, details):
-        self.address = address
-        self.name = name
-        self.details = details
-
-    def __str__(self):
-        return f'{self.address}: {self.name}'
-
-    def __repr__(self):
-        return f'BLEDevice({self.address}, {self.name})'
-
-
-class bleekWareError(Exception):
-    """Base Exception for bleekWare."""
-
-    pass
-
-
-class bleekWareCharacteristicNotFoundError(bleekWareError):
-    """A characteristic is not supported by a device."""
-
-    def __init__(self, uuid):
-        """
-        uuid (str): UUID of the characteristic which was not found
-        """
-        super().__init__(f"Characteristic {uuid} was not found!")
-        self.char_specifier = uuid
-
-
-class bleekWareDeviceNotFoundError(bleekWareError):
-    """A device couldn't be found."""
-
-    def __init__(self, identifier, *args):
-        """
-        Args:
-            identifier (str): device identifier (Bluetooth address or UUID)
-            of the device which was not found
-        """
-        super().__init__(*args)
-        self.identifier = identifier
 
 
 class BLEGattService:
