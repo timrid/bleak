@@ -20,10 +20,11 @@ requires = [
     # There is an error message "Failed to create MD5 hash for file content." when declaring "../..".
     # So you have to create manually with 
     #   > pip wheel ../.. --no-deps
-    "./bleak-1.0.0-py3-none-any.whl",  
+    "./bleak-1.0.0-py3-none-any.whl",
 ]
 test_requires = [
     "pytest",
+    "pytest-asyncio",
 ]
 
 [tool.briefcase.app.bleak_example.windows]
