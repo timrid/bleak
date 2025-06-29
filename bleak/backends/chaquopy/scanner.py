@@ -1,19 +1,19 @@
-import asyncio
-import inspect
-import time
+from typing import Literal
 
 from android.bluetooth import BluetoothAdapter
-from android.bluetooth.le import ScanCallback, ScanResult, ScanSettings
+from android.bluetooth.le import ScanCallback, ScanFilter, ScanResult, ScanSettings
+from android.os import ParcelUuid
 from java import Override, jint, jvoid, static_proxy
-from java.util import HashMap
+from java.util import ArrayList, HashMap
 from org.beeware.android import MainActivity
 
 from bleak.backends.chaquopy import check_for_permissions
-from bleak.backends.device import BLEDevice
+from bleak.backends.scanner import (
+    AdvertisementData,
+    AdvertisementDataCallback,
+    BaseBleakScanner,
+)
 from bleak.exc import BleakError
-
-scan_result = {}
-async_callbacks = set()  # To keep reference for callbacks
 
 
 class _PythonScanCallback(static_proxy(ScanCallback)):
@@ -34,29 +34,15 @@ class _PythonScanCallback(static_proxy(ScanCallback)):
 
         This is the callback method for BluetoothLeScanner.startScan().
         """
-        device = scanResult.getDevice()
+        native_device = scanResult.getDevice()
         record = scanResult.getScanRecord()
-
-        address = device.getAddress()
-
-        new_device = BLEDevice(address, device.getName(), device)
 
         service_uuids = record.getServiceUuids()
         if service_uuids is not None:
-            service_uuids = [
-                service_uuid.toString()
-                for service_uuid in service_uuids.toArray()  # was ArrayList
-            ]
+            service_uuids = [service_uuid.toString() for service_uuid in service_uuids.toArray()]
 
-            # Should probably use a ScanFilter on the startScan method,
-            # however, I'm doing this "post" result...
-            if self.scanner.service_uuids and not any(
-                uuid in self.scanner.service_uuids for uuid in service_uuids
-            ):
-                return
-        else:
-            if self.scanner.service_uuids:
-                return
+        if not self.scanner.is_allowed_uuid(service_uuids):
+            return
 
         manufacturer = record.getManufacturerSpecificData()
         manufacturer = {
@@ -83,11 +69,10 @@ class _PythonScanCallback(static_proxy(ScanCallback)):
                 element.getValue()
             )
 
-        tx_power = (
-            None
-            if record.getTxPowerLevel() == -2147483648
-            else record.getTxPowerLevel()
-        )
+        tx_power = record.getTxPowerLevel()
+        if tx_power == -2147483648:  # Integer#MIN_VALUE
+            # change "not present" value to None to match other backends
+            tx_power = None
 
         advertisement = AdvertisementData(
             local_name=record.getDeviceName(),
@@ -99,82 +84,38 @@ class _PythonScanCallback(static_proxy(ScanCallback)):
             platform_data=(scanResult,),
         )
 
-        scan_result[address] = (new_device, advertisement)
-        if self.scanner.detection_callback:
-            if inspect.iscoroutinefunction(self.scanner.detection_callback):
-                task = asyncio.create_task(
-                    self.scanner.detection_callback(new_device, advertisement)
-                )
-                async_callbacks.add(task)
-                task.add_done_callback(async_callbacks.discard)
-            else:
-                self.scanner.detection_callback(new_device, advertisement)
+        device = self.scanner.create_or_update_device(
+            native_device.getAddress(),
+            native_device.getAddress(),
+            native_device.getName(),
+            native_device,
+            advertisement
+        )
+
+        self.scanner.call_detection_callbacks(device, advertisement)
 
 
-class AdvertisementData:
-    """Class to hold advertisement data from a BLE device."""
-
-    def __init__(
-        self,
-        local_name=None,
-        manufacturer_data={},
-        service_data={},
-        service_uuids=[],
-        tx_power=None,
-        rssi=0,
-        platform_data=tuple(),
-    ):
-        self.local_name = local_name
-        self.manufacturer_data = manufacturer_data
-        self.service_data = service_data
-        self.service_uuids = service_uuids
-        self.tx_power = tx_power
-        self.rssi = rssi
-        self.platform_data = platform_data
-
-    def __repr__(self):
-        kwargs = []
-        if self.local_name:
-            kwargs.append(f'local_name={repr(self.local_name)}')
-        if self.manufacturer_data:
-            kwargs.append(f'manufacturer_data={repr(self.manufacturer_data)}')
-        if self.service_data:
-            kwargs.append(f'service_data={repr(self.service_data)}')
-        if self.service_uuids:
-            kwargs.append(f'service_uuids={repr(self.service_uuids)}')
-        if self.tx_power is not None:
-            kwargs.append(f'tx_power={repr(self.tx_power)}')
-        kwargs.append(f'rssi={repr(self.rssi)}')
-        return f"AdvertisementData({', '.join(kwargs)})"
-
-
-class BleakScannerChaquopy:  # (BaseBleakScanner):
+class BleakScannerChaquopy(BaseBleakScanner):
     """Class to scan for free (un-connected) Bluetooth LE devices."""
 
+    # TODO: Singleton is not good...
     scanner = None
 
     def __init__(
         self,
-        detection_callback=None,
-        service_uuids=None,
-        scanning_mode='active',
+        detection_callback: AdvertisementDataCallback | None = None,
+        service_uuids: list[str] | None = None,
+        scanning_mode: Literal["active", "passive"]='active',
         **kwargs,
     ):
+        super(BleakScannerChaquopy, self).__init__(detection_callback, service_uuids)
+
         self.activity = self.context = MainActivity.singletonThis
-        self.detection_callback = detection_callback
-        self.service_uuids = service_uuids
+
         if scanning_mode == 'passive':
             self.scan_mode = ScanSettings.SCAN_MODE_OPPORTUNISTIC
         else:
             self.scan_mode = ScanSettings.SCAN_MODE_LOW_LATENCY
-        scan_result.clear()
-
-    async def __aenter__(self):
-        await self.start()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.stop()
 
     async def start(self):
         """Start a scan for BLE devices."""
@@ -185,6 +126,12 @@ class BleakScannerChaquopy:  # (BaseBleakScanner):
 
         scan_settings_builder = ScanSettings.Builder()
         scan_settings_builder.setScanMode(self.scan_mode)
+        # TODO: Check what Settings from P4Android mean:
+        # scan_settings_builder.setReportDelay(0)
+        # scan_settings_builder.setPhy(ScanSettings.PHY_LE_ALL_SUPPORTED)
+        # scan_settings_builder.setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
+        # scan_settings_builder.setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+        # scan_settings_builder.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
         scan_settings = scan_settings_builder.build()
 
         check_for_permissions(self.activity)
@@ -201,11 +148,18 @@ class BleakScannerChaquopy:  # (BaseBleakScanner):
         BleakScannerChaquopy.scanner = self
 
         self.callback = _PythonScanCallback(BleakScannerChaquopy.scanner)
-        scan_result.clear()
+        self.seen_devices = {}
 
-        # Could define a ScanFilter for name, address or service_uuids here
-        # (-->None), however, I keep the already working methods for now
-        self.leScanner.startScan(None, scan_settings, self.callback)  # type: ignore
+        filters = ArrayList()
+        if self._service_uuids:
+            for uuid in self._service_uuids:
+                filters.add(
+                    ScanFilter.Builder()
+                    .setServiceUuid(ParcelUuid.fromString(uuid))
+                    .build()
+                )
+
+        self.leScanner.startScan(filters, scan_settings, self.callback)
 
     async def stop(self):
         """Stop a running scan."""
@@ -213,71 +167,3 @@ class BleakScannerChaquopy:  # (BaseBleakScanner):
             self.leScanner.stopScan(self.callback)
             BleakScannerChaquopy.scanner = None
             self.leScanner = None
-
-    async def advertisement_data(self):
-        """Provide an asynchronous generator.
-
-        Tuples of (BLEDevice, AdvertismentData are yielded upon
-        detection.
-        """
-        devices = asyncio.Queue()
-        self.detection_callback = lambda device, data: devices.put_nowait(
-            (device, data)
-        )
-        try:
-            while True:
-                yield await devices.get()
-        finally:
-            self.detection_callback = None
-
-    @property
-    def discovered_devices(self):
-        """Hold a list of found BLE devices."""
-        return [device for device, _ in scan_result.values()]
-
-    @property
-    def discovered_devices_and_advertisement_data(self):
-        """Store BLE devices and their advertisemend data in dictionary."""
-        return scan_result
-
-    @classmethod
-    async def discover(cls, timeout=5.0, return_adv=False, **kwargs):
-        """Search for BLE devices and return result.
-
-        Returns a list of BLE devices of type BLEDevice (if
-        'return_adv' is False) or a dictionary ('return_adv' = True),
-        where the keys are the devices addresses (as MAC or UUID) and
-        the values tuples of BLEDevice, AdvertisementData.
-        """
-        async with cls(**kwargs) as scanner:
-            await asyncio.sleep(timeout)
-            if return_adv:
-                return scanner.discovered_devices_and_advertisement_data
-            else:
-                return scanner.discovered_devices
-
-    @classmethod
-    async def _find_device(
-        cls, name=None, address=None, timeout=10.0, **kwargs
-    ):
-        """Scan for and find a certain device by name or address. PRIVATE."""
-        async with cls(**kwargs):
-            start_time = time.time()
-            while time.time() < start_time + timeout:
-                for device, _ in scan_result.values():
-                    if name and device.name == name:
-                        return device
-                    elif address and device.address.lower() == address.lower():
-                        return device
-                await asyncio.sleep(0.1)
-        return None
-
-    @classmethod
-    async def find_device_by_name(cls, name, timeout=10.0, **kwargs):
-        """Search for and return a BLE device by its name."""
-        return await cls._find_device(name, None, timeout, **kwargs)
-
-    @classmethod
-    async def find_device_by_address(cls, address, timeout=10.0, **kwargs):
-        """Search for and return a BLE devce by its address."""
-        return await cls._find_device(None, address, timeout, **kwargs)
