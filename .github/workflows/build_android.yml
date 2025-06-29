@@ -53,3 +53,4 @@ jobs:
 
                   ${{ matrix.briefcase-args }} \
                   ${{ matrix.briefcase-build-args }}
+              working-directory: examples/briefcase
