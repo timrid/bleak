@@ -290,6 +290,11 @@ def get_platform_scanner_backend_type() -> type[BaseBleakScanner]:
 
         return BleakScannerP4Android
 
+    if platform.system() == "Android" and os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
+        from bleak.backends.chaquopy.scanner import BleakScannerChaquopy
+
+        return BleakScannerChaquopy
+
     if platform.system() == "Linux":
         from bleak.backends.bluezdbus.scanner import BleakScannerBlueZDBus
 

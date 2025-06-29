@@ -7,7 +7,7 @@ from android.bluetooth.le import ScanCallback, ScanResult, ScanSettings
 from java import Override, jclass, jint, jvoid, static_proxy
 from java.util import HashMap
 
-from . import BLEDevice, bleekWareError, check_for_permissions
+from bleak.backends.chaquopy import BLEDevice, bleekWareError, check_for_permissions
 
 scan_result = {}
 async_callbacks = set()  # To keep reference for callbacks
@@ -21,7 +21,7 @@ class _PythonScanCallback(static_proxy(ScanCallback)):
     It is not intended to call this class directly.
     """
 
-    def __init__(self, scanner: "Scanner"):
+    def __init__(self, scanner: "BleakScannerChaquopy"):
         super(_PythonScanCallback, self).__init__()
         self.scanner = scanner
 
@@ -145,7 +145,7 @@ class AdvertisementData:
         return f"AdvertisementData({', '.join(kwargs)})"
 
 
-class Scanner:
+class BleakScannerChaquopy:  # (BaseBleakScanner):
     """Class to scan for free (un-connected) Bluetooth LE devices."""
 
     scanner = None
@@ -177,7 +177,7 @@ class Scanner:
 
     async def start(self):
         """Start a scan for BLE devices."""
-        if Scanner.scanner is not None:
+        if BleakScannerChaquopy.scanner is not None:
             raise bleekWareError(
                 'A BleakScanner is already scanning on this adapter.'
             )
@@ -197,9 +197,9 @@ class Scanner:
             raise bleekWareError('Bluetooth is not turned on')
 
         self.leScanner = self.adapter.getBluetoothLeScanner()
-        Scanner.scanner = self
+        BleakScannerChaquopy.scanner = self
 
-        self.callback = _PythonScanCallback(Scanner.scanner)
+        self.callback = _PythonScanCallback(BleakScannerChaquopy.scanner)
         scan_result.clear()
 
         # Could define a ScanFilter for name, address or service_uuids here
@@ -210,7 +210,7 @@ class Scanner:
         """Stop a running scan."""
         if self.leScanner is not None:
             self.leScanner.stopScan(self.callback)
-            Scanner.scanner = None
+            BleakScannerChaquopy.scanner = None
             self.leScanner = None
 
     async def advertisement_data(self):

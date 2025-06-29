@@ -16,7 +16,7 @@ from android.os import Build
 from java import Override, jarray, jbyte, jclass, jint, jvoid, static_proxy
 from java.util import UUID
 
-from . import (
+from bleak.backends.chaquopy import (
     BLEDevice,
     BLEGattService,
     bleekWareCharacteristicNotFoundError,
@@ -35,7 +35,7 @@ CCCD = '00002902-0000-1000-8000-00805f9b34fb'
 class _PythonGattCallback(static_proxy(BluetoothGattCallback)):
     """Callback class for GattClient. PRIVATE."""
 
-    def __init__(self, client: "Client"):
+    def __init__(self, client: "BleakClientChaquopy"):
         super(_PythonGattCallback, self).__init__()
         self.client = client
 
@@ -106,7 +106,7 @@ class _PythonGattCallback(static_proxy(BluetoothGattCallback)):
             self.client.mtu = int(mtu)
 
 
-class Client:
+class BleakClientChaquopy:  # (BaseBleakClient):
     """Class to connect to a Bluetooth LE GATT server and communicate."""
 
     client = None
@@ -165,10 +165,10 @@ class Client:
             self.gatt.connect()
         else:
             # Make a reference for external access
-            Client.client = self
+            BleakClientChaquopy.client = self
 
             # Create a GATT connection
-            self.gatt_callback = _PythonGattCallback(Client.client)
+            self.gatt_callback = _PythonGattCallback(BleakClientChaquopy.client)
             self.gatt = self.device.connectGatt(
                 self.activity, False, self.gatt_callback
             )
@@ -199,7 +199,7 @@ class Client:
         services.clear()
         status_message.clear()
         received_data.clear()
-        Client.client = None
+        BleakClientChaquopy.client = None
 
         return True  # For Bleak backwards compatibility
 
