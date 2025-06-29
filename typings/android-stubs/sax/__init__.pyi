@@ -1,0 +1,59 @@
+
+import sys
+if sys.version_info >= (3, 8):
+    from typing import Protocol
+else:
+    from typing_extensions import Protocol
+
+import org.xml.sax
+import typing
+
+
+
+class Element:
+    @typing.overload
+    def getChild(self, string: str) -> 'Element': ...
+    @typing.overload
+    def getChild(self, string: str, string2: str) -> 'Element': ...
+    @typing.overload
+    def requireChild(self, string: str) -> 'Element': ...
+    @typing.overload
+    def requireChild(self, string: str, string2: str) -> 'Element': ...
+    def setElementListener(self, elementListener: 'ElementListener') -> None: ...
+    def setEndElementListener(self, endElementListener: typing.Union['EndElementListener', typing.Callable]) -> None: ...
+    def setEndTextElementListener(self, endTextElementListener: typing.Union['EndTextElementListener', typing.Callable]) -> None: ...
+    def setStartElementListener(self, startElementListener: typing.Union['StartElementListener', typing.Callable]) -> None: ...
+    def setTextElementListener(self, textElementListener: 'TextElementListener') -> None: ...
+    def toString(self) -> str: ...
+
+class EndElementListener:
+    def end(self) -> None: ...
+
+class EndTextElementListener:
+    def end(self, string: str) -> None: ...
+
+class StartElementListener:
+    def start(self, attributes: org.xml.sax.Attributes) -> None: ...
+
+class ElementListener(StartElementListener, EndElementListener): ...
+
+class RootElement(Element):
+    @typing.overload
+    def __init__(self, string: str): ...
+    @typing.overload
+    def __init__(self, string: str, string2: str): ...
+    def getContentHandler(self) -> org.xml.sax.ContentHandler: ...
+
+class TextElementListener(StartElementListener, EndTextElementListener): ...
+
+
+class __module_protocol__(Protocol):
+    # A module protocol which reflects the result of ``jp.JPackage("android.sax")``.
+
+    Element: typing.Type[Element]
+    ElementListener: typing.Type[ElementListener]
+    EndElementListener: typing.Type[EndElementListener]
+    EndTextElementListener: typing.Type[EndTextElementListener]
+    RootElement: typing.Type[RootElement]
+    StartElementListener: typing.Type[StartElementListener]
+    TextElementListener: typing.Type[TextElementListener]

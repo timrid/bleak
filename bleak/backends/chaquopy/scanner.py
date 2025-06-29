@@ -1,7 +1,3 @@
-"""
-bleekWare.Scanner
-"""
-
 import asyncio
 import inspect
 import time
@@ -25,12 +21,12 @@ class _PythonScanCallback(static_proxy(ScanCallback)):
     It is not intended to call this class directly.
     """
 
-    def __init__(self, scanner):
+    def __init__(self, scanner: "Scanner"):
         super(_PythonScanCallback, self).__init__()
         self.scanner = scanner
 
     @Override(jvoid, [jint, ScanResult])
-    def onScanResult(self, callbackType, scanResult):
+    def onScanResult(self, callbackType: jint, scanResult: ScanResult):
         """Receive and handle the scan result for BLE devices.
 
         This is the callback method for BluetoothLeScanner.startScan().
@@ -204,12 +200,11 @@ class Scanner:
         Scanner.scanner = self
 
         self.callback = _PythonScanCallback(Scanner.scanner)
-
         scan_result.clear()
 
         # Could define a ScanFilter for name, address or service_uuids here
         # (-->None), however, I keep the already working methods for now
-        self.leScanner.startScan(None, scan_settings, self.callback)
+        self.leScanner.startScan(None, scan_settings, self.callback)  # type: ignore
 
     async def stop(self):
         """Stop a running scan."""

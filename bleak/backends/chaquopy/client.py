@@ -1,10 +1,7 @@
-"""
-bleekware.Client
-"""
-
 import asyncio
 import functools
 import inspect
+from typing import cast
 
 from android.bluetooth import (
     BluetoothAdapter,
@@ -12,6 +9,7 @@ from android.bluetooth import (
     BluetoothGattCallback,
     BluetoothGattCharacteristic,
     BluetoothGattDescriptor,
+    BluetoothGattService,
     BluetoothProfile,
 )
 from android.os import Build
@@ -27,7 +25,7 @@ from . import (
 
 received_data = []
 status_message = []
-services = []
+services: list[BluetoothGattService] = []
 async_callbacks = set()
 
 # Client Characteristic Configuration Descriptor
@@ -37,12 +35,12 @@ CCCD = '00002902-0000-1000-8000-00805f9b34fb'
 class _PythonGattCallback(static_proxy(BluetoothGattCallback)):
     """Callback class for GattClient. PRIVATE."""
 
-    def __init__(self, client):
+    def __init__(self, client: "Client"):
         super(_PythonGattCallback, self).__init__()
         self.client = client
 
     @Override(jvoid, [BluetoothGatt, jint, jint])
-    def onConnectionStateChange(self, gatt, status, newState):
+    def onConnectionStateChange(self, gatt: BluetoothGatt, status: jint, newState: jint):
         """Register connect or disconnect events.
 
         This is the callback function for Android's 'device.ConnectGatt'.
@@ -52,13 +50,12 @@ class _PythonGattCallback(static_proxy(BluetoothGattCallback)):
             gatt.discoverServices()
         elif newState == BluetoothProfile.STATE_DISCONNECTED:
             status_message.append('disconnected')
-            gatt = None
             services.clear()
             if self.client.disconnected_callback:
                 self.client.disconnected_callback()
 
     @Override(jvoid, [BluetoothGatt, jint])
-    def onServicesDiscovered(self, gatt, status):
+    def onServicesDiscovered(self, gatt: BluetoothGatt, status: jint):
         """Write services to list.
 
         This is the callback function for Android's 'gatt.discoverServices'.
@@ -72,7 +69,7 @@ class _PythonGattCallback(static_proxy(BluetoothGattCallback)):
         [BluetoothGatt, BluetoothGattCharacteristic, jarray(jbyte), jint],
     )
     @Override(jvoid, [BluetoothGatt, BluetoothGattCharacteristic, jint])
-    def onCharacteristicRead(self, gatt, characteristic, *args):
+    def onCharacteristicRead(self, gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, *args):
         """Put characteristic's read value to a data list.
 
         This is the callback function for Android's 'gatt.readCharacteristic'.
@@ -92,7 +89,7 @@ class _PythonGattCallback(static_proxy(BluetoothGattCallback)):
     @Override(
         jvoid, [BluetoothGatt, BluetoothGattCharacteristic, jarray(jbyte)]
     )
-    def onCharacteristicChanged(self, gatt, characteristic, value):
+    def onCharacteristicChanged(self, gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: jarray):
         """Read the notification.
 
         This is the callback function for notifying services.
@@ -100,13 +97,13 @@ class _PythonGattCallback(static_proxy(BluetoothGattCallback)):
         received_data.append(characteristic.getValue())
 
     @Override(jvoid, [BluetoothGatt, jint, jint])
-    def onMtuChanged(self, gatt, mtu, status):
+    def onMtuChanged(self, gatt: BluetoothGatt, mtu: jint, status: jint):
         """Handle change in MTU size.
 
         This is the callback function for changes in MTU.
         """
         if status == BluetoothGatt.GATT_SUCCESS:
-            self.client.mtu = mtu
+            self.client.mtu = int(mtu)
 
 
 class Client:
@@ -142,7 +139,7 @@ class Client:
         if services:
             raise NotImplementedError()
         self.adapter = None
-        self.gatt = None
+        self.gatt: BluetoothGatt | None = None
         self._services = []
         self.mtu = 23
 
@@ -212,7 +209,7 @@ class Client:
         ``uuid`` (characteristic specifier) must be an UUID as string
         ``callback`` can be a usual or async callback method
         """
-        if not self.is_connected:
+        if not self.is_connected or self.gatt is None:
             raise bleekWareError('Client not connected')
 
         self.notification_callback = callback
@@ -242,6 +239,9 @@ class Client:
 
     async def stop_notify(self, uuid):
         """Stop notification of a notifying characteristic."""
+        if not self.is_connected or self.gatt is None:
+            raise bleekWareError('Client not connected')
+        
         characteristic = self._find_characteristic(uuid)
         if characteristic:
             self.gatt.setCharacteristicNotification(characteristic, False)
@@ -259,6 +259,9 @@ class Client:
         For bleekWare, you must pass the characteristic's UUID
         as string.
         """
+        if not self.is_connected or self.gatt is None:
+            raise bleekWareError('Client not connected')
+    
         characteristic = self._find_characteristic(uuid)
         if characteristic:
             self.gatt.readCharacteristic(characteristic)
@@ -274,6 +277,9 @@ class Client:
         For bleekWare, you must pass the characteristic's UUID
         as string.
         """
+        if not self.is_connected or self.gatt is None:
+            raise bleekWareError('Client not connected')
+
         characteristic = self._find_characteristic(uuid)
         if characteristic:
             if response is None:
@@ -289,6 +295,8 @@ class Client:
                     write_type = (
                         BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                     )
+                else:
+                    raise bleekWareError("unknown property")
             elif response:
                 write_type = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
             else:
@@ -328,7 +336,7 @@ class Client:
 
         return self._services
 
-    async def _get_services(self):
+    async def _get_services(self) -> list[BLEGattService]:
         """Read and store the announced services of a GATT server. PRIVAT.
 
         The characteristics of the services are also read. Both are
@@ -338,7 +346,7 @@ class Client:
             return self._services
         for service in services:
             new_service = BLEGattService(service)
-            characts = service.getCharacteristics().toArray()
+            characts = cast(list[BluetoothGattCharacteristic], service.getCharacteristics().toArray())
             for charact in characts:
                 new_service.characteristics.append(str(charact.getUuid()))
             self._services.append(new_service)

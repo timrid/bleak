@@ -11,6 +11,7 @@ Bleak.
 MIT license
 """
 
+from android.bluetooth import BluetoothGattCharacteristic, BluetoothGattService
 from android.os import Build
 from java import jclass
 
@@ -65,9 +66,9 @@ class bleekWareDeviceNotFoundError(bleekWareError):
 
 class BLEGattService:
 
-    def __init__(self, service):
-        self.service = service
-        self.characteristics = []
+    def __init__(self, service: BluetoothGattService):
+        self.service: BluetoothGattService = service
+        self.characteristics: list[str] = []
         self.descriptors = []
 
 
