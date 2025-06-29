@@ -11,7 +11,10 @@ Bleak.
 MIT license
 """
 
+from android import Manifest
+from android.app import Activity
 from android.bluetooth import BluetoothGattCharacteristic, BluetoothGattService
+from android.content.pm import PackageManager
 from android.os import Build
 from java import jclass
 
@@ -72,7 +75,7 @@ class BLEGattService:
         self.descriptors = []
 
 
-def check_for_permissions(activity):
+def check_for_permissions(activity: Activity):
     """Check for and request neccessary BLE permissions.
 
     This was a hard one. Hard to find which permissions are really
@@ -85,16 +88,18 @@ def check_for_permissions(activity):
     api_level = Build.VERSION.SDK_INT
     if api_level >= 23 and api_level <= 30:
         permissions = [
-            jclass("android.Manifest$permission").ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION,
         ]
     elif api_level > 30:
         permissions = [
-            jclass("android.Manifest$permission").BLUETOOTH_SCAN,
-            jclass("android.Manifest$permission").BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
         ]
+    else:
+        raise ValueError("unknown api level")
     permissions_granted = all(
         activity.checkSelfPermission(permission)
-        == jclass("android.content.pm.PackageManager").PERMISSION_GRANTED
+        == PackageManager.PERMISSION_GRANTED
         for permission in permissions
     )
     if not permissions_granted:

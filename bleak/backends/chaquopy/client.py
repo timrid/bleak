@@ -15,6 +15,7 @@ from android.bluetooth import (
 from android.os import Build
 from java import Override, jarray, jbyte, jclass, jint, jvoid, static_proxy
 from java.util import UUID
+from org.beeware.android import MainActivity
 
 from bleak.backends.chaquopy import (
     BLEDevice,
@@ -118,9 +119,7 @@ class BleakClientChaquopy:  # (BaseBleakClient):
         services=None,
         **kwargs,
     ):
-        self.activity = self.context = jclass(
-            'org.beeware.android.MainActivity'
-        ).singletonThis
+        self.activity = self.context = MainActivity.singletonThis
 
         if isinstance(address_or_ble_device, BLEDevice):
             self._address = address_or_ble_device.address

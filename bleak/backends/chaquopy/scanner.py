@@ -6,6 +6,7 @@ from android.bluetooth import BluetoothAdapter
 from android.bluetooth.le import ScanCallback, ScanResult, ScanSettings
 from java import Override, jclass, jint, jvoid, static_proxy
 from java.util import HashMap
+from org.beeware.android import MainActivity
 
 from bleak.backends.chaquopy import BLEDevice, bleekWareError, check_for_permissions
 
@@ -157,9 +158,7 @@ class BleakScannerChaquopy:  # (BaseBleakScanner):
         scanning_mode='active',
         **kwargs,
     ):
-        self.activity = self.context = jclass(
-            'org.beeware.android.MainActivity'
-        ).singletonThis
+        self.activity = self.context = MainActivity.singletonThis
         self.detection_callback = detection_callback
         self.service_uuids = service_uuids
         if scanning_mode == 'passive':
