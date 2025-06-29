@@ -40,8 +40,7 @@ jobs:
 
             - name: Run App
               run: |
-                ${{ matrix.briefcase-build-prefix }} \
-                briefcase build \
+                briefcase run \
                   Android \
                   Gradle \
                   --test --no-input --log \
