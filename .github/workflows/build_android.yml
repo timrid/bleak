@@ -24,10 +24,6 @@ jobs:
             - name: Install dependencies
               run: pip install briefcase==0.3.23
 
-            - name: Build bleak .whl
-              run: pip wheel ../.. --no-deps
-              working-directory: examples/briefcase
-
             - name: Setup Environment
               run: |
                 # Use GitHub's preinstalled JDK 17 for Android builds
@@ -38,7 +34,12 @@ jobs:
                 sudo udevadm control --reload-rules
                 sudo udevadm trigger --name-match=kvm
 
+            - name: Build bleak .whl
+              working-directory: ./examples/briefcase
+              run: pip wheel ../.. --no-deps
+
             - name: Run App
+              working-directory: ./examples/briefcase
               run: |
                 briefcase run \
                   Android \
@@ -49,8 +50,4 @@ jobs:
                   --Xemulator=-no-window \
                   --Xemulator=-no-snapshot \
                   --Xemulator=-no-audio \
-                  --Xemulator=-no-boot-anim \
-
-                  ${{ matrix.briefcase-args }} \
-                  ${{ matrix.briefcase-build-args }}
-              working-directory: examples/briefcase
+                  --Xemulator=-no-boot-anim
