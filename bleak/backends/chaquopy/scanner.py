@@ -39,7 +39,9 @@ class _PythonScanCallback(static_proxy(ScanCallback)):
 
         service_uuids = record.getServiceUuids()
         if service_uuids is not None:
-            service_uuids = [service_uuid.toString() for service_uuid in service_uuids.toArray()]
+            service_uuids = [
+                service_uuid.toString() for service_uuid in service_uuids.toArray()
+            ]
 
         if not self.scanner.is_allowed_uuid(service_uuids):
             return
@@ -65,9 +67,7 @@ class _PythonScanCallback(static_proxy(ScanCallback)):
         service_data_iterator = temp_map.entrySet().iterator()
         while service_data_iterator.hasNext():
             element = service_data_iterator.next()
-            service_data[element.getKey().toString()] = bytes(
-                element.getValue()
-            )
+            service_data[element.getKey().toString()] = bytes(element.getValue())
 
         tx_power = record.getTxPowerLevel()
         if tx_power == -2147483648:  # Integer#MIN_VALUE
@@ -89,7 +89,7 @@ class _PythonScanCallback(static_proxy(ScanCallback)):
             native_device.getAddress(),
             native_device.getName(),
             native_device,
-            advertisement
+            advertisement,
         )
 
         self.scanner.call_detection_callbacks(device, advertisement)
@@ -105,14 +105,14 @@ class BleakScannerChaquopy(BaseBleakScanner):
         self,
         detection_callback: AdvertisementDataCallback | None = None,
         service_uuids: list[str] | None = None,
-        scanning_mode: Literal["active", "passive"]='active',
+        scanning_mode: Literal["active", "passive"] = "active",
         **kwargs,
     ):
         super(BleakScannerChaquopy, self).__init__(detection_callback, service_uuids)
 
         self.activity = self.context = MainActivity.singletonThis
 
-        if scanning_mode == 'passive':
+        if scanning_mode == "passive":
             self.scan_mode = ScanSettings.SCAN_MODE_OPPORTUNISTIC
         else:
             self.scan_mode = ScanSettings.SCAN_MODE_LOW_LATENCY
@@ -120,9 +120,7 @@ class BleakScannerChaquopy(BaseBleakScanner):
     async def start(self):
         """Start a scan for BLE devices."""
         if BleakScannerChaquopy.scanner is not None:
-            raise BleakError(
-                'A BleakScanner is already scanning on this adapter.'
-            )
+            raise BleakError("A BleakScanner is already scanning on this adapter.")
 
         scan_settings_builder = ScanSettings.Builder()
         scan_settings_builder.setScanMode(self.scan_mode)
@@ -138,17 +136,9 @@ class BleakScannerChaquopy(BaseBleakScanner):
 
         self.adapter = BluetoothAdapter.getDefaultAdapter()
         if self.adapter is None:
-            raise BleakError(
-                'Bluetooth is not supported on this hardware platform'
-            )
+            raise BleakError("Bluetooth is not supported on this hardware platform")
         if self.adapter.getState() != BluetoothAdapter.STATE_ON:
-            raise BleakError('Bluetooth is not turned on')
-
-        self.leScanner = self.adapter.getBluetoothLeScanner()
-        BleakScannerChaquopy.scanner = self
-
-        self.callback = _PythonScanCallback(BleakScannerChaquopy.scanner)
-        self.seen_devices = {}
+            raise BleakError("Bluetooth is not turned on")
 
         filters = ArrayList()
         if self._service_uuids:
@@ -159,7 +149,21 @@ class BleakScannerChaquopy(BaseBleakScanner):
                     .build()
                 )
 
-        self.leScanner.startScan(filters, scan_settings, self.callback)
+        self.seen_devices = {}
+
+        try:
+            self.leScanner = self.adapter.getBluetoothLeScanner()
+            BleakScannerChaquopy.scanner = self
+
+            self.callback = _PythonScanCallback(BleakScannerChaquopy.scanner)
+
+            self.leScanner.startScan(filters, scan_settings, self.callback)
+        except Exception as e:
+            # 'startScan' can fail e.g. with an SecurityException if the app does not have
+            # the required permissions.
+            BleakScannerChaquopy.scanner = None
+            self.leScanner = None
+            raise BleakError(f"Failed to start scan: {e}") from e
 
     async def stop(self):
         """Stop a running scan."""
