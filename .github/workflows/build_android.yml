@@ -38,6 +38,7 @@ jobs:
                 sudo udevadm trigger --name-match=kvm
 
             - name: Start Emulator Controller FastAPI-Server
+              working-directory: ./examples/briefcase
               run: |
                 nohup python emulator_controller_server.py > server.log 2>&1 &
                 tail -f server.log &
