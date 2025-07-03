@@ -250,4 +250,6 @@ async def gatt_server_status():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("test_commander:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run(
+        "emulator_controller_server:app", host="127.0.0.1", port=8000, reload=True
+    )
