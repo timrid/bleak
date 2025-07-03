@@ -22,7 +22,7 @@ jobs:
                 python -m pip install briefcase==0.3.23
 
             - name: Install dependencies
-              run: pip install briefcase==0.3.23
+              run: pip install git+https://github.com/timrid/briefcase.git@feature/adb-forward-reverse-port-option
 
             - name: Install ADB
               run: sudo apt-get update && sudo apt-get install -y android-tools-adb
