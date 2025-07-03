@@ -19,7 +19,8 @@ jobs:
             - name: Install Briefcase
               run: |
                 python -m pip install -U pip setuptools wheel
-                python -m pip install briefcase==0.3.23
+                python -m pip install briefcase==0.3.23 
+                python -m pip install bumble==0.0.212 uvicorn==0.35.0 fastapi==0.115.14
 
             - name: Install dependencies
               run: pip install git+https://github.com/timrid/briefcase.git@feature/adb-forward-reverse-port-option
