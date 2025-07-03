@@ -7,7 +7,7 @@ from typing import Generator
 import pytest
 from toga_android.libs.events import AndroidEventLoop
 
-from .emulator_controller import EmulatorController
+from .emulator_controller_client import EmulatorControllerClient
 
 loop = None
 
@@ -83,7 +83,7 @@ class ProxyTask:
 
 
 @pytest.fixture(scope="session")
-def emulator_controller() -> EmulatorController:
-    emulator_controller = EmulatorController()
+def emulator_controller() -> EmulatorControllerClient:
+    emulator_controller = EmulatorControllerClient()
     emulator_controller.ping()
     return emulator_controller
