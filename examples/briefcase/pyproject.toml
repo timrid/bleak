@@ -11,6 +11,7 @@ long_description = """More details about the app should go here.
 """
 sources = [
     "src/bleak_example",
+    "../../bleak"
 ]
 test_sources = [
     "tests",
@@ -18,13 +19,12 @@ test_sources = [
 
 requires = [
     # There is an error message "Failed to create MD5 hash for file content." when declaring "../..".
-    # So you have to create manually with 
-    #   > pip wheel ../.. --no-deps
-    "./bleak-1.0.0-py3-none-any.whl",
+    # So we just copy the bleak files (see 'sources').
 ]
 test_requires = [
     "pytest",
     "pytest-asyncio",
+    "requests",
 ]
 
 [tool.briefcase.app.bleak_example.windows]
