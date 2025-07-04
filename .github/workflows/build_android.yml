@@ -21,6 +21,14 @@ jobs:
               run: |
                 uv pip install git+https://github.com/timrid/briefcase.git@feature/adb-forward-reverse-port-option
 
+            - name: Cache Briefcase tools
+              uses: actions/cache@v4
+              with:
+                path: ~/.cache/briefcase
+                key: ${{ runner.os }}-briefcase-${{ hashFiles('**/pyproject.toml') }}
+                restore-keys: |
+                  ${{ runner.os }}-briefcase-
+
             - name: Setup Environment
               run: |
                 # Use GitHub's preinstalled JDK 17 for Android builds
