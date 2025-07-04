@@ -1,3 +1,11 @@
+# /// script
+# dependencies = [
+#   "bumble==0.0.212",
+#   "uvicorn==0.35.0",
+#   "fastapi==0.115.14"
+# ]
+# ///
+
 import asyncio
 import logging
 import os
