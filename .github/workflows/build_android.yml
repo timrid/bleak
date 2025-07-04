@@ -21,13 +21,13 @@ jobs:
               run: |
                 uv pip install git+https://github.com/timrid/briefcase.git@feature/adb-forward-reverse-port-option
 
-            - name: Cache Briefcase tools
+            - name: Cache Android SDK
               uses: actions/cache@v4
               with:
-                path: ~/.cache/briefcase
-                key: ${{ runner.os }}-briefcase-${{ hashFiles('**/pyproject.toml') }}
+                path: /usr/local/lib/android/sdk
+                key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/pyproject.toml') }}
                 restore-keys: |
-                  ${{ runner.os }}-briefcase-
+                  ${{ runner.os }}-android-sdk-
 
             - name: Setup Environment
               run: |
