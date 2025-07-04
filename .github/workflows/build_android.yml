@@ -55,6 +55,4 @@ jobs:
                   --Xemulator=-no-snapshot \
                   --Xemulator=-no-audio \
                   --Xemulator=-no-boot-anim \
-                  --reverse-port 8000 \
-                  -vv
-
+                  --reverse-port 8000
