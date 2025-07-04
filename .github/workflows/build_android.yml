@@ -33,8 +33,6 @@ jobs:
 
             - name: Start Emulator Controller FastAPI-Server
               working-directory: ./examples/briefcase
-              env:
-                ADB_PATH: ~/.cache/briefcase/tools/android_sdk/platform-tools
               run: |
                 nohup uv run emulator_controller_server.py > server.log 2>&1 &
                 tail -f server.log &

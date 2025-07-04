@@ -29,10 +29,17 @@ from bumble.transport.common import Transport
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-if os.environ.get("ADB_PATH"):
-    ADB_PATH = str(Path(os.environ["ADB_PATH"]) / "adb.exe")
+if sys.platform.startswith("win"):
+    adb_executable = "adb.exe"
 else:
-    ADB_PATH = "adb"
+    adb_executable = "adb"
+
+ADB_PATH = Path(os.environ["ANDROID_HOME"]) / "platform-tools" / adb_executable
+
+if not ADB_PATH.exists():
+    raise FileNotFoundError(
+        f"ADB executable not found at {ADB_PATH}. Please set the ANDROID_HOME environment variable correctly."
+    )
 
 
 def call_adb(command: list[str]) -> str:
