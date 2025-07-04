@@ -3,6 +3,7 @@ import logging
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from bumble.att import ATT_INSUFFICIENT_ENCRYPTION_ERROR, ATT_Error
 from bumble.device import Connection, Device, DeviceConfiguration
@@ -20,7 +21,10 @@ from bumble.transport.common import Transport
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-ADB_PATH = "adb"
+if os.environ.get("ADB_PATH"):
+    ADB_PATH = str(Path(os.environ["ADB_PATH"]) / "adb.exe")
+else:
+    ADB_PATH = "adb"
 
 
 def call_adb(command: list[str]) -> str:
