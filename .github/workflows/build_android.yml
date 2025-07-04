@@ -7,6 +7,10 @@ jobs:
     test_briefcase_android:
         name: "Build Briefcase Tests (Android)"
         runs-on: ubuntu-24.04
+
+        env:
+          FORCE_COLOR: "1"
+
         steps:
             - name: Checkout
               uses: actions/checkout@v4
@@ -20,14 +24,6 @@ jobs:
             - name: Install Briefcase
               run: |
                 uv pip install git+https://github.com/timrid/briefcase.git@feature/adb-forward-reverse-port-option
-
-            - name: Cache Android SDK
-              uses: actions/cache@v4
-              with:
-                path: /usr/local/lib/android/sdk
-                key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/pyproject.toml') }}
-                restore-keys: |
-                  ${{ runner.os }}-android-sdk-
 
             - name: Setup Environment
               run: |
