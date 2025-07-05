@@ -3,6 +3,7 @@
 """
 Base class for backend clients.
 """
+
 import abc
 import os
 import platform
@@ -211,11 +212,11 @@ def get_platform_client_backend_type() -> type[BaseBleakClient]:
 
         return BleakClientP4Android
 
-    if platform.system() == "Android" and os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
+    if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
         from bleak.backends.chaquopy.client import BleakClientChaquopy
 
         return BleakClientChaquopy
-    
+
     if platform.system() == "Linux":
         from bleak.backends.bluezdbus.client import BleakClientBlueZDBus
 
