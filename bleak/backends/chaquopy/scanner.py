@@ -124,12 +124,11 @@ class BleakScannerChaquopy(BaseBleakScanner):
 
         scan_settings_builder = ScanSettings.Builder()
         scan_settings_builder.setScanMode(self.scan_mode)
-        # TODO: Check what Settings from P4Android mean:
-        # scan_settings_builder.setReportDelay(0)
-        # scan_settings_builder.setPhy(ScanSettings.PHY_LE_ALL_SUPPORTED)
-        # scan_settings_builder.setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
-        # scan_settings_builder.setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-        # scan_settings_builder.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+        scan_settings_builder.setReportDelay(0)
+        scan_settings_builder.setPhy(ScanSettings.PHY_LE_ALL_SUPPORTED)
+        scan_settings_builder.setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
+        scan_settings_builder.setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+        scan_settings_builder.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
         scan_settings = scan_settings_builder.build()
 
         check_for_permissions(self.activity)
