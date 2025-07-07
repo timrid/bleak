@@ -207,15 +207,10 @@ def get_platform_client_backend_type() -> type[BaseBleakClient]:
     """
     Gets the platform-specific :class:`BaseBleakClient` type.
     """
-    if os.environ.get("P4A_BOOTSTRAP") is not None:
-        from bleak.backends.p4android.client import BleakClientP4Android
+    if hasattr(sys, "getandroidapilevel"):
+        from bleak.backends.android.client import BleakClientAndroid
 
-        return BleakClientP4Android
-
-    if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
-        from bleak.backends.chaquopy.client import BleakClientChaquopy
-
-        return BleakClientChaquopy
+        return BleakClientAndroid
 
     if platform.system() == "Linux":
         from bleak.backends.bluezdbus.client import BleakClientBlueZDBus

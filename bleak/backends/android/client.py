@@ -2,40 +2,53 @@
 """
 BLE Client for python-for-android
 """
-import sys
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    if sys.platform != "android":
-        assert False, "This backend is only available on Android"
 
 import asyncio
 import logging
+import sys
 import uuid
 import warnings
 from typing import Any, Optional, Union
+
+from typing_extensions import Buffer
 
 if sys.version_info < (3, 12):
     from typing_extensions import override
 else:
     from typing import override
 
-from android.broadcast import BroadcastReceiver
-from jnius import java_method
-
 from bleak.assigned_numbers import gatt_char_props_to_strs
+from bleak.backends.android.client_callback import (
+    OnCharacteristicReadCallback,
+    OnCharacteristicWriteCallback,
+    OnConnectionStateChangeCallback,
+    OnConnectionStateChangeResult,
+    OnDescriptorReadCallback,
+    OnDescriptorWriteCallback,
+    OnMtuChangedCallback,
+    OnServicesDiscoveredCallback,
+)
 from bleak.backends.characteristic import BleakGATTCharacteristic
 from bleak.backends.client import BaseBleakClient, NotifyCallback
 from bleak.backends.descriptor import BleakGATTDescriptor
 from bleak.backends.device import BLEDevice
-from bleak.backends.p4android import defs, utils
 from bleak.backends.service import BleakGATTService, BleakGATTServiceCollection
 from bleak.exc import BleakError
 
 logger = logging.getLogger(__name__)
 
+# if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
+from bleak.backends.android.chaquopy import defs
+from bleak.backends.android.chaquopy.client_callback import _PythonBluetoothGattCallback
 
-class BleakClientP4Android(BaseBleakClient):
+# elif os.environ.get("P4A_BOOTSTRAP") is not None:
+#     from bleak.backends.android.p4android import defs
+#     from bleak.backends.android.p4android.client_callback import _PythonBluetoothGattCallback
+# else:
+#     raise BleakError("No supported Android environment detected.")
+
+
+class BleakClientAndroid(BaseBleakClient):
     """A python-for-android Bleak Client
 
     Args:
@@ -52,14 +65,14 @@ class BleakClientP4Android(BaseBleakClient):
         services: Optional[set[uuid.UUID]],
         **kwargs,
     ):
-        super(BleakClientP4Android, self).__init__(address_or_ble_device, **kwargs)
+        super(BleakClientAndroid, self).__init__(address_or_ble_device, **kwargs)
         self._requested_services = (
-            set(map(defs.UUID.fromString, services)) if services else None
+            set(map(defs.UUID.fromString, str(services))) if services else None
         )
         # kwarg "device" is for backwards compatibility
         self.__adapter = kwargs.get("adapter", kwargs.get("device", None))
-        self.__gatt = None
-        self.__mtu = 23
+        self.__gatt: defs.BluetoothGatt | None = None
+        self.__mtu: int = 23
 
     # Connectivity methods
 
@@ -79,23 +92,24 @@ class BleakClientP4Android(BaseBleakClient):
 
         self.__device = self.__adapter.getRemoteDevice(self.address)
 
-        self.__callbacks = _PythonBluetoothGattCallback(self, loop)
+        self.__callbacks = callbacks = _PythonBluetoothGattCallback(self, loop)
 
-        self._subscriptions = {}
+        self._subscriptions: dict[int, NotifyCallback] = {}
 
         logger.debug(f"Connecting to BLE device @ {self.address}")
 
-        (self.__gatt,) = await self.__callbacks.perform_and_wait(
-            dispatchApi=self.__device.connectGatt,
-            dispatchParams=(
+        self.__gatt, _ = await self.__callbacks.dispatcher.perform_and_wait(
+            dispatch_api=lambda: self.__device.connectGatt(
                 defs.context,
                 False,
-                self.__callbacks.java,
+                callbacks.java,
                 defs.BluetoothDevice.TRANSPORT_LE,
             ),
-            resultApi="onConnectionStateChange",
-            resultExpected=(defs.BluetoothProfile.STATE_CONNECTED,),
-            return_indicates_status=False,
+            callback_api=OnConnectionStateChangeCallback(),
+            callback_expected_result=OnConnectionStateChangeResult(
+                new_state=defs.BluetoothProfile.STATE_CONNECTED
+            ),
+            dispatch_result_indicates_status=False,
         )
 
         try:
@@ -104,17 +118,17 @@ class BleakClientP4Android(BaseBleakClient):
             # unlike other backends, Android doesn't automatically negotiate
             # the MTU, so we request the largest size possible like BlueZ
             logger.debug("requesting mtu...")
-            (self.__mtu,) = await self.__callbacks.perform_and_wait(
-                dispatchApi=self.__gatt.requestMtu,
-                dispatchParams=(517,),
-                resultApi="onMtuChanged",
+            gatt = self.__gatt
+            result = await self.__callbacks.dispatcher.perform_and_wait(
+                dispatch_api=lambda: gatt.requestMtu(517),
+                callback_api=OnMtuChangedCallback(),
             )
+            self.__mtu = result.mtu
 
             logger.debug("discovering services...")
-            await self.__callbacks.perform_and_wait(
-                dispatchApi=self.__gatt.discoverServices,
-                dispatchParams=(),
-                resultApi="onServicesDiscovered",
+            await self.__callbacks.dispatcher.perform_and_wait(
+                dispatch_api=lambda: gatt.discoverServices(),
+                callback_api=OnServicesDiscoveredCallback(),
             )
 
             await self._get_services()
@@ -137,16 +151,19 @@ class BleakClientP4Android(BaseBleakClient):
             # connection.
             logger.debug("already disconnected")
             return
+        assert self.__callbacks
 
         # Try to disconnect the actual device/peripheral
         try:
-            await self.__callbacks.perform_and_wait(
-                dispatchApi=self.__gatt.disconnect,
-                dispatchParams=(),
-                resultApi="onConnectionStateChange",
-                resultExpected=(defs.BluetoothProfile.STATE_DISCONNECTED,),
+            gatt = self.__gatt
+            await self.__callbacks.dispatcher.perform_and_wait(
+                dispatch_api=lambda: gatt.disconnect(),
+                callback_api=OnConnectionStateChangeCallback(),
+                callback_expected_result=OnConnectionStateChangeResult(
+                    defs.BluetoothProfile.STATE_DISCONNECTED
+                ),
                 unless_already=True,
-                return_indicates_status=False,
+                dispatch_result_indicates_status=False,
             )
             self.__gatt.close()
         except Exception as e:
@@ -222,11 +239,20 @@ class BleakClientP4Android(BaseBleakClient):
             Boolean representing connection status.
 
         """
-        return (
-            self.__callbacks is not None
-            and self.__callbacks.states["onConnectionStateChange"][1]
-            == defs.BluetoothProfile.STATE_CONNECTED
-        )
+        if self.__callbacks is None:
+            return False
+
+        callback_state = self.__callbacks.states.get(OnConnectionStateChangeCallback())
+        if callback_state is None:
+            return False
+
+        callback_result = callback_state.callback_result
+        assert isinstance(callback_result, OnConnectionStateChangeResult)
+
+        if callback_result.new_state != defs.BluetoothProfile.STATE_CONNECTED:
+            return False
+
+        return True
 
     @property
     @override
@@ -245,10 +271,13 @@ class BleakClientP4Android(BaseBleakClient):
         if self.services is not None:
             return self.services
 
+        assert self.__gatt
+
         services = BleakGATTServiceCollection()
 
         logger.debug("Get Services...")
         for java_service in self.__gatt.getServices():
+            assert isinstance(java_service, defs.BluetoothGattService)
             if (
                 self._requested_services is not None
                 and java_service.getUuid() not in self._requested_services
@@ -263,7 +292,7 @@ class BleakClientP4Android(BaseBleakClient):
             services.add_service(service)
 
             for java_characteristic in java_service.getCharacteristics():
-
+                assert isinstance(java_characteristic, defs.BluetoothGattCharacteristic)
                 characteristic = BleakGATTCharacteristic(
                     java_characteristic,
                     java_characteristic.getInstanceId(),
@@ -277,7 +306,6 @@ class BleakClientP4Android(BaseBleakClient):
                 for descriptor_index, java_descriptor in enumerate(
                     java_characteristic.getDescriptors()
                 ):
-
                     descriptor = BleakGATTDescriptor(
                         java_descriptor,
                         characteristic.handle + 1 + descriptor_index,
@@ -304,13 +332,15 @@ class BleakClientP4Android(BaseBleakClient):
             (bytearray) The read data.
 
         """
+        assert self.__callbacks
+        assert self.__gatt
 
-        (value,) = await self.__callbacks.perform_and_wait(
-            dispatchApi=self.__gatt.readCharacteristic,
-            dispatchParams=(characteristic.obj,),
-            resultApi=("onCharacteristicRead", characteristic.handle),
+        gatt = self.__gatt
+        callback_result = await self.__callbacks.dispatcher.perform_and_wait(
+            dispatch_api=lambda: gatt.readCharacteristic(characteristic.obj),
+            callback_api=OnCharacteristicReadCallback(characteristic.handle),
         )
-        value = bytearray(value)
+        value = bytearray(callback_result.value)
         logger.debug(
             f"Read Characteristic {characteristic.uuid} | {characteristic.handle}: {value}"
         )
@@ -328,12 +358,15 @@ class BleakClientP4Android(BaseBleakClient):
         Returns:
             The read data.
         """
-        (value,) = await self.__callbacks.perform_and_wait(
-            dispatchApi=self.__gatt.readDescriptor,
-            dispatchParams=(descriptor.obj,),
-            resultApi=("onDescriptorRead", descriptor.uuid),
+        assert self.__callbacks
+        assert self.__gatt
+
+        gatt = self.__gatt
+        callback_result = await self.__callbacks.dispatcher.perform_and_wait(
+            dispatch_api=lambda: gatt.readDescriptor(descriptor.obj),
+            callback_api=OnDescriptorReadCallback(uuid=descriptor.uuid),
         )
-        value = bytearray(value)
+        value = bytearray(callback_result.value)
 
         logger.debug(
             f"Read Descriptor {descriptor.uuid} | {descriptor.handle}: {value}"
@@ -343,8 +376,12 @@ class BleakClientP4Android(BaseBleakClient):
 
     @override
     async def write_gatt_char(
-        self, characteristic: BleakGATTCharacteristic, data: bytearray, response: bool
+        self, characteristic: BleakGATTCharacteristic, data: Buffer, response: bool
     ) -> None:
+        assert self.__callbacks
+        assert self.__gatt
+        assert isinstance(characteristic.obj, defs.BluetoothGattCharacteristic)
+
         if response:
             characteristic.obj.setWriteType(
                 defs.BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
@@ -356,10 +393,12 @@ class BleakClientP4Android(BaseBleakClient):
 
         characteristic.obj.setValue(data)
 
-        await self.__callbacks.perform_and_wait(
-            dispatchApi=self.__gatt.writeCharacteristic,
-            dispatchParams=(characteristic.obj,),
-            resultApi=("onCharacteristicWrite", characteristic.handle),
+        gatt = self.__gatt
+        await self.__callbacks.dispatcher.perform_and_wait(
+            dispatch_api=lambda: gatt.writeCharacteristic(characteristic.obj),
+            callback_api=OnCharacteristicWriteCallback(
+                handle=characteristic.handle,
+            ),
         )
 
         logger.debug(
@@ -368,33 +407,25 @@ class BleakClientP4Android(BaseBleakClient):
 
     @override
     async def write_gatt_descriptor(
-        self,
-        desc_specifier: Union[BleakGATTDescriptor, str, uuid.UUID],
-        data: bytearray,
+        self, descriptor: BleakGATTDescriptor, data: Buffer
     ) -> None:
         """Perform a write operation on the specified GATT descriptor.
 
         Args:
-            desc_specifier (BleakGATTDescriptor, str or UUID): The descriptor to write
-                to, specified by either UUID or directly by the
-                BleakGATTDescriptor object representing it.
             data (bytes or bytearray): The data to send.
 
         """
-        if not isinstance(desc_specifier, BleakGATTDescriptor):
-            descriptor = self.services.get_descriptor(desc_specifier)
-        else:
-            descriptor = desc_specifier
-
-        if not descriptor:
-            raise BleakError(f"Descriptor {desc_specifier} was not found!")
+        assert self.__callbacks
+        assert self.__gatt
+        assert self.services
+        assert isinstance(descriptor.obj, defs.BluetoothGattDescriptor)
 
         descriptor.obj.setValue(data)
 
-        await self.__callbacks.perform_and_wait(
-            dispatchApi=self.__gatt.writeDescriptor,
-            dispatchParams=(descriptor.obj,),
-            resultApi=("onDescriptorWrite", descriptor.uuid),
+        gatt = self.__gatt
+        await self.__callbacks.dispatcher.perform_and_wait(
+            dispatch_api=lambda: gatt.writeDescriptor(descriptor.obj),
+            callback_api=OnDescriptorWriteCallback(uuid=descriptor.uuid),
         )
 
         logger.debug(
@@ -422,7 +453,7 @@ class BleakClientP4Android(BaseBleakClient):
 
         await self.write_gatt_descriptor(
             characteristic.notification_descriptor,
-            defs.BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
+            bytes(defs.BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE),
         )
 
     @override
@@ -434,9 +465,11 @@ class BleakClientP4Android(BaseBleakClient):
                 notification/indication on,.
 
         """
+        assert self.__gatt
+
         await self.write_gatt_descriptor(
             characteristic.notification_descriptor,
-            defs.BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE,
+            bytes(defs.BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE),
         )
 
         if not self.__gatt.setCharacteristicNotification(characteristic.obj, False):
@@ -444,67 +477,3 @@ class BleakClientP4Android(BaseBleakClient):
                 f"Failed to disable notification for characteristic {characteristic.uuid}"
             )
         del self._subscriptions[characteristic.handle]
-
-
-class _PythonBluetoothGattCallback(utils.AsyncJavaCallbacks):
-    __javainterfaces__ = [
-        "com.github.hbldh.bleak.PythonBluetoothGattCallback$Interface"
-    ]
-
-    def __init__(self, client, loop):
-        super().__init__(loop)
-        self._client = client
-        self.java = defs.PythonBluetoothGattCallback(self)
-
-    def result_state(self, status, resultApi, *data):
-        if status == defs.BluetoothGatt.GATT_SUCCESS:
-            failure_str = None
-        else:
-            failure_str = defs.GATT_STATUS_STRINGS.get(status, status)
-        self._loop.call_soon_threadsafe(
-            self._result_state_unthreadsafe, failure_str, resultApi, data
-        )
-
-    @java_method("(II)V")
-    def onConnectionStateChange(self, status, new_state):
-        try:
-            self.result_state(status, "onConnectionStateChange", new_state)
-        except BleakError:
-            pass
-        if (
-            new_state == defs.BluetoothProfile.STATE_DISCONNECTED
-            and self._client._disconnected_callback is not None
-        ):
-            self._client._disconnected_callback()
-
-    @java_method("(II)V")
-    def onMtuChanged(self, mtu, status):
-        self.result_state(status, "onMtuChanged", mtu)
-
-    @java_method("(I)V")
-    def onServicesDiscovered(self, status):
-        self.result_state(status, "onServicesDiscovered")
-
-    @java_method("(I[B)V")
-    def onCharacteristicChanged(self, handle, value):
-        self._loop.call_soon_threadsafe(
-            self._client._subscriptions[handle], bytearray(value.tolist())
-        )
-
-    @java_method("(II[B)V")
-    def onCharacteristicRead(self, handle, status, value):
-        self.result_state(
-            status, ("onCharacteristicRead", handle), bytes(value.tolist())
-        )
-
-    @java_method("(II)V")
-    def onCharacteristicWrite(self, handle, status):
-        self.result_state(status, ("onCharacteristicWrite", handle))
-
-    @java_method("(Ljava/lang/String;I[B)V")
-    def onDescriptorRead(self, uuid, status, value):
-        self.result_state(status, ("onDescriptorRead", uuid), bytes(value.tolist()))
-
-    @java_method("(Ljava/lang/String;I)V")
-    def onDescriptorWrite(self, uuid, status):
-        self.result_state(status, ("onDescriptorWrite", uuid))

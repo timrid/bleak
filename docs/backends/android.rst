@@ -18,7 +18,7 @@ a custom template to embed Java subclasses of the Bluetooth Android interfaces,
 for forwarding callbacks.
 
 The Python-for-Android backend classes are found in the
-``bleak.backends.p4android`` package and are automatically selected when
+``bleak.backends.android`` package and are automatically selected when
 building with python-for-android or `Buildozer <https://buildozer.readthedocs.io/>`_,
 Kivy's automated build tool.
 
@@ -37,7 +37,7 @@ resources may need to be consulted to find information on various device
 quirks, such as community developer forums.
 
 Sometimes device drivers will give off new, undocumented error codes.
-There is a developing list of these at ``bleak.backends.p4android.defs.GATT_STATUS_NAMES``.
+There is a developing list of these at ``bleak.backends.android.defs.GATT_STATUS_NAMES``.
 Please add to the list if you find new status codes, which is indicated by a
 number being reported instead of a name.
 
@@ -62,12 +62,12 @@ API
 Scanner
 ~~~~~~~
 
-.. automodule:: bleak.backends.p4android.scanner
+.. automodule:: bleak.backends.android.scanner
     :members:
 
 
 Client
 ~~~~~~
 
-.. automodule:: bleak.backends.p4android.client
+.. automodule:: bleak.backends.android.client
     :members:

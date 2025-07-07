@@ -47,7 +47,7 @@ build_gradle_dependencies = [
     # "org.osmdroid:osmdroid-android:6.1.20",
 ]
 
-build_gradle_extra_content = "android.defaultConfig.python.staticProxy('bleak.backends.chaquopy.scanner', 'bleak.backends.chaquopy.client')"
+build_gradle_extra_content = "android.defaultConfig.python.staticProxy('bleak.backends.android.chaquopy.scanner_callback', 'bleak.backends.android.chaquopy.client_callback')"
 android_manifest_extra_content = """
 <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
 <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />

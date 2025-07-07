@@ -3,6 +3,7 @@ import asyncio
 import inspect
 import os
 import platform
+import sys
 from collections.abc import Callable, Coroutine, Hashable
 from typing import Any, NamedTuple, Optional
 
@@ -285,15 +286,10 @@ def get_platform_scanner_backend_type() -> type[BaseBleakScanner]:
     """
     Gets the platform-specific :class:`BaseBleakScanner` type.
     """
-    if os.environ.get("P4A_BOOTSTRAP") is not None:
-        from bleak.backends.p4android.scanner import BleakScannerP4Android
+    if hasattr(sys, "getandroidapilevel"):
+        from bleak.backends.android.scanner import BleakScannerAndroid
 
-        return BleakScannerP4Android
-
-    if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
-        from bleak.backends.chaquopy.scanner import BleakScannerChaquopy
-
-        return BleakScannerChaquopy
+        return BleakScannerAndroid
 
     if platform.system() == "Linux":
         from bleak.backends.bluezdbus.scanner import BleakScannerBlueZDBus

@@ -1,0 +1,58 @@
+import enum
+
+import bleak.exc
+
+# if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
+from bleak.backends.android.chaquopy import defs
+
+# elif os.environ.get("P4A_BOOTSTRAP") is not None:
+#     from bleak.backends.android.p4android import defs
+# else:
+#     raise BleakError("No supported Android environment detected.")
+
+
+class ScanFailed(enum.IntEnum):
+    ALREADY_STARTED = defs.ScanCallback.SCAN_FAILED_ALREADY_STARTED
+    APPLICATION_REGISTRATION_FAILED = (
+        defs.ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED
+    )
+    FEATURE_UNSUPPORTED = defs.ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED
+    INTERNAL_ERROR = defs.ScanCallback.SCAN_FAILED_INTERNAL_ERROR
+
+
+GATT_SUCCESS = 0x0000
+# TODO: we may need different lookups, e.g. one for bleak.exc.CONTROLLER_ERROR_CODES
+GATT_STATUS_STRINGS = {
+    # https://developer.android.com/reference/android/bluetooth/BluetoothGatt
+    # https://android.googlesource.com/platform/external/bluetooth/bluedroid/+/5738f83aeb59361a0a2eda2460113f6dc9194271/stack/include/gatt_api.h
+    # https://android.googlesource.com/platform/system/bt/+/master/stack/include/gatt_api.h
+    # https://www.bluetooth.com/specifications/bluetooth-core-specification/
+    **bleak.exc.PROTOCOL_ERROR_CODES,
+    0x007F: "Too Short",
+    0x0080: "No Resources",
+    0x0081: "Internal Error",
+    0x0082: "Wrong State",
+    0x0083: "DB Full",
+    0x0084: "Busy",
+    0x0085: "Error",
+    0x0086: "Command Started",
+    0x0087: "Illegal Parameter",
+    0x0088: "Pending",
+    0x0089: "Auth Failure",
+    0x008A: "More",
+    0x008B: "Invalid Configuration",
+    0x008C: "Service Started",
+    0x008D: "Encrypted No MITM",
+    0x008E: "Not Encrypted",
+    0x008F: "Congested",
+    0x0090: "Duplicate Reg",
+    0x0091: "Already Open",
+    0x0092: "Cancel",
+    0x0101: "Failure",
+}
+
+
+def gatt_status_to_string(status: int) -> str | None:
+    if status == GATT_SUCCESS:
+        return None
+    return GATT_STATUS_STRINGS.get(status, str(status))

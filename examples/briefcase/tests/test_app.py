@@ -17,6 +17,7 @@ def test_first2(emulator_controller: EmulatorControllerClient):
         package="com.bleak.briefcaseexample.bleak_example",
         permission="android.permission.BLUETOOTH_SCAN",
     )
+    emulator_controller.activate_bluetooth()
     emulator_controller.gatt_server_start()
 
 

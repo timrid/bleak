@@ -1,14 +1,10 @@
-import sys
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    if sys.platform != "android":
-        assert False, "This backend is only available on Android"
-
 import asyncio
 import logging
+import sys
 import warnings
 from typing import Literal, Optional
+
+from bleak.backends.android.scanner_callback import OnScanCallback
 
 if sys.version_info < (3, 11):
     from async_timeout import timeout as async_timeout
@@ -20,11 +16,6 @@ if sys.version_info < (3, 12):
 else:
     from typing import override
 
-from android.broadcast import BroadcastReceiver
-from android.permissions import Permission, request_permissions
-from jnius import cast, java_method
-
-from bleak.backends.p4android import defs, utils
 from bleak.backends.scanner import (
     AdvertisementData,
     AdvertisementDataCallback,
@@ -34,8 +25,20 @@ from bleak.exc import BleakError
 
 logger = logging.getLogger(__name__)
 
+# if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
+from bleak.backends.android.chaquopy import defs
+from bleak.backends.android.chaquopy.permissions import check_for_permissions
+from bleak.backends.android.chaquopy.scanner_callback import _PythonScanCallback
 
-class BleakScannerP4Android(BaseBleakScanner):
+# elif os.environ.get("P4A_BOOTSTRAP") is not None:
+#     from bleak.backends.android.p4android import defs
+#     from bleak.backends.android.p4android.permissions import check_for_permissions
+#     from bleak.backends.android.p4android.client_cascanner_callbackllback import _PythonScanCallback
+# else:
+#     raise BleakError("No supported Android environment detected.")
+
+
+class BleakScannerAndroid(BaseBleakScanner):
     """
     The python-for-android Bleak BLE Scanner.
 
@@ -60,54 +63,30 @@ class BleakScannerP4Android(BaseBleakScanner):
         scanning_mode: Literal["active", "passive"],
         **kwargs,
     ):
-        super(BleakScannerP4Android, self).__init__(detection_callback, service_uuids)
+        super(BleakScannerAndroid, self).__init__(detection_callback, service_uuids)
 
         if scanning_mode == "passive":
             self.__scan_mode = defs.ScanSettings.SCAN_MODE_OPPORTUNISTIC
         else:
             self.__scan_mode = defs.ScanSettings.SCAN_MODE_LOW_LATENCY
 
-        self.__adapter = None
-        self.__javascanner = None
+        self.__adapter: defs.BluetoothAdapter | None = None
+        self.__javascanner: defs.BluetoothLeScanner | None = None
         self.__callback = None
 
     @override
     async def start(self) -> None:
-        if BleakScannerP4Android.__scanner is not None:
+        if BleakScannerAndroid.__scanner is not None:
             raise BleakError("A BleakScanner is already scanning on this adapter.")
 
         logger.debug("Starting BTLE scan")
 
         loop = asyncio.get_running_loop()
 
+        if self.__callback is None:
+            self.__callback = _PythonScanCallback(self, loop)
         if self.__javascanner is None:
-            if self.__callback is None:
-                self.__callback = _PythonScanCallback(self, loop)
-
-            permission_acknowledged = loop.create_future()
-
-            def handle_permissions(permissions, grantResults):
-                if any(grantResults):
-                    loop.call_soon_threadsafe(
-                        permission_acknowledged.set_result, grantResults
-                    )
-                else:
-                    loop.call_soon_threadsafe(
-                        permission_acknowledged.set_exception(
-                            BleakError("User denied access to " + str(permissions))
-                        )
-                    )
-
-            request_permissions(
-                [
-                    Permission.ACCESS_FINE_LOCATION,
-                    Permission.ACCESS_COARSE_LOCATION,
-                    "android.permission.ACCESS_BACKGROUND_LOCATION",
-                ],
-                handle_permissions,
-            )
-            await permission_acknowledged
-
+            await check_for_permissions(loop)
             self.__adapter = defs.BluetoothAdapter.getDefaultAdapter()
             if self.__adapter is None:
                 raise BleakError("Bluetooth is not supported on this hardware platform")
@@ -116,9 +95,11 @@ class BleakScannerP4Android(BaseBleakScanner):
 
             self.__javascanner = self.__adapter.getBluetoothLeScanner()
 
-        BleakScannerP4Android.__scanner = self
+        assert self.__adapter
 
-        filters = cast("java.util.List", defs.List())
+        BleakScannerAndroid.__scanner = self
+
+        filters = defs.ArrayList()
         if self._service_uuids:
             for uuid in self._service_uuids:
                 filters.add(
@@ -127,22 +108,26 @@ class BleakScannerP4Android(BaseBleakScanner):
                     .build()
                 )
 
-        scanfuture = self.__callback.perform_and_wait(
-            dispatchApi=self.__javascanner.startScan,
-            dispatchParams=(
+        scan_settings = (
+            defs.ScanSettingsBuilder()
+            .setScanMode(self.__scan_mode)
+            .setReportDelay(0)
+            .setPhy(defs.ScanSettings.PHY_LE_ALL_SUPPORTED)
+            .setNumOfMatches(defs.ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
+            .setMatchMode(defs.ScanSettings.MATCH_MODE_AGGRESSIVE)
+            .setCallbackType(defs.ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+            .build()
+        )
+        javascanner = self.__javascanner
+        callback = self.__callback
+        scanfuture = self.__callback.dispatcher.perform_and_wait(
+            dispatch_api=lambda: javascanner.startScan(
                 filters,
-                defs.ScanSettingsBuilder()
-                .setScanMode(self.__scan_mode)
-                .setReportDelay(0)
-                .setPhy(defs.ScanSettings.PHY_LE_ALL_SUPPORTED)
-                .setNumOfMatches(defs.ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
-                .setMatchMode(defs.ScanSettings.MATCH_MODE_AGGRESSIVE)
-                .setCallbackType(defs.ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-                .build(),
-                self.__callback.java,
+                scan_settings,
+                callback.java,
             ),
-            resultApi="onScan",
-            return_indicates_status=False,
+            callback_api=OnScanCallback(),
+            dispatch_result_indicates_status=False,
         )
         self.__javascanner.flushPendingScanResults(self.__callback.java)
 
@@ -170,9 +155,9 @@ class BleakScannerP4Android(BaseBleakScanner):
                     def handleAdapterStateChanged(context, intent):
                         adapter_state = intent.getIntExtra(
                             defs.BluetoothAdapter.EXTRA_STATE,
-                            defs.BluetoothAdapter.STATE_ERROR,
+                            defs.BluetoothAdapter.ERROR,
                         )
-                        if adapter_state == defs.BluetoothAdapter.STATE_ERROR:
+                        if adapter_state == defs.BluetoothAdapter.ERROR:
                             loop.call_soon_threadsafe(
                                 stateOffFuture.set_exception,
                                 BleakError(f"Unexpected adapter state {adapter_state}"),
@@ -221,15 +206,17 @@ class BleakScannerP4Android(BaseBleakScanner):
 
     @override
     async def stop(self) -> None:
+        assert self.__callback
+
         if self.__javascanner is not None:
             logger.debug("Stopping BTLE scan")
             self.__javascanner.stopScan(self.__callback.java)
-            BleakScannerP4Android.__scanner = None
+            BleakScannerAndroid.__scanner = None
             self.__javascanner = None
         else:
             logger.debug("BTLE scan already stopped")
 
-    def _handle_scan_result(self, result) -> None:
+    def _handle_scan_result(self, result: defs.ScanResult) -> None:
         native_device = result.getDevice()
         record = result.getScanRecord()
 
@@ -246,10 +233,13 @@ class BleakScannerP4Android(BaseBleakScanner):
             for index in range(manufacturer_data.size())
         }
 
-        service_data = {
-            entry.getKey().toString(): bytes(entry.getValue())
-            for entry in record.getServiceData().entrySet()
-        }
+        service_data = {}
+        temp_map = defs.HashMap(record.getServiceData())
+        service_data_iterator = temp_map.entrySet().iterator()
+        while service_data_iterator.hasNext():
+            element = service_data_iterator.next()
+            service_data[element.getKey().toString()] = bytes(element.getValue())
+
         tx_power = record.getTxPowerLevel()
 
         # change "not present" value to None to match other backends
@@ -275,28 +265,3 @@ class BleakScannerP4Android(BaseBleakScanner):
         )
 
         self.call_detection_callbacks(device, advertisement)
-
-
-class _PythonScanCallback(utils.AsyncJavaCallbacks):
-    __javainterfaces__ = ["com.github.hbldh.bleak.PythonScanCallback$Interface"]
-
-    def __init__(self, scanner: BleakScannerP4Android, loop: asyncio.AbstractEventLoop):
-        super().__init__(loop)
-        self._scanner = scanner
-        self.java = defs.PythonScanCallback(self)
-
-    def result_state(self, status_str, name, *data):
-        self._loop.call_soon_threadsafe(
-            self._result_state_unthreadsafe, status_str, name, data
-        )
-
-    @java_method("(I)V")
-    def onScanFailed(self, errorCode):
-        self.result_state(defs.ScanFailed(errorCode).name, "onScan")
-
-    @java_method("(Landroid/bluetooth/le/ScanResult;)V")
-    def onScanResult(self, result):
-        self._loop.call_soon_threadsafe(self._scanner._handle_scan_result, result)
-
-        if "onScan" not in self.states:
-            self.result_state(None, "onScan", result)

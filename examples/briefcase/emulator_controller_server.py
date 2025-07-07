@@ -83,11 +83,14 @@ async def revoke_permission(package: str, permission: str):
 
 
 @app.post("/activate_bluetooth/")
-async def activate_bluetooth(package: str, permission: str):
-    # Enable Bluetooth (A small hack with key events)
-    call_adb(["shell", "am", "start", "-a", "android.settings.BLUETOOTH_SETTINGS"])
-    call_adb(["shell", "input", "keyevent", "19"])  # Arrow up
-    call_adb(["shell", "input", "keyevent", "23"])  # Enter
+async def activate_bluetooth():
+    btle_status = call_adb(["shell", "settings", "get", "global", "bluetooth_on"])
+    print(f"{btle_status=}")
+    if btle_status == "0":
+        # Enable Bluetooth (A small hack with key events)
+        call_adb(["shell", "am", "start", "-a", "android.settings.BLUETOOTH_SETTINGS"])
+        call_adb(["shell", "input", "keyevent", "19"])  # Arrow up
+        call_adb(["shell", "input", "keyevent", "23"])  # Enter
 
 
 class Listener(Device.Listener, Connection.Listener):

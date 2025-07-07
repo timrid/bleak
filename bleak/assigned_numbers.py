@@ -78,7 +78,7 @@ CHARACTERISTIC_PROPERTIES: dict[int, CharacteristicPropertyName] = {
 
 def gatt_char_props_to_strs(
     props: int,
-) -> frozenset[CharacteristicPropertyName]:
+) -> list[CharacteristicPropertyName]:
     """
     Convert a GATT characteristic properties bitmask to a set of strings.
 
@@ -88,6 +88,6 @@ def gatt_char_props_to_strs(
     Returns:
         A set of strings representing the GATT characteristic properties.
     """
-    return frozenset(
+    return list(
         CHARACTERISTIC_PROPERTIES[i] for i in (1 << n for n in range(16)) if props & i
     )
