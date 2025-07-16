@@ -221,7 +221,9 @@ class BleakScannerAndroid(BaseBleakScanner):
         record = result.getScanRecord()
 
         service_uuids = record.getServiceUuids()
-        if service_uuids is not None:
+        if service_uuids is None:
+            service_uuids = []
+        else:
             service_uuids = [service_uuid.toString() for service_uuid in service_uuids]
 
         if not self.is_allowed_uuid(service_uuids):

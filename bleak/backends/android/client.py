@@ -10,11 +10,10 @@ import uuid
 import warnings
 from typing import Any, Optional, Union
 
-from typing_extensions import Buffer
-
 if sys.version_info < (3, 12):
-    from typing_extensions import override
+    from typing_extensions import Buffer, override
 else:
+    from collections.abc import Buffer
     from typing import override
 
 from bleak.assigned_numbers import gatt_char_props_to_strs
@@ -276,7 +275,7 @@ class BleakClientAndroid(BaseBleakClient):
         services = BleakGATTServiceCollection()
 
         logger.debug("Get Services...")
-        for java_service in self.__gatt.getServices():
+        for java_service in self.__gatt.getServices().toArray():
             assert isinstance(java_service, defs.BluetoothGattService)
             if (
                 self._requested_services is not None
@@ -291,7 +290,7 @@ class BleakClientAndroid(BaseBleakClient):
             )
             services.add_service(service)
 
-            for java_characteristic in java_service.getCharacteristics():
+            for java_characteristic in java_service.getCharacteristics().toArray():
                 assert isinstance(java_characteristic, defs.BluetoothGattCharacteristic)
                 characteristic = BleakGATTCharacteristic(
                     java_characteristic,
@@ -304,12 +303,13 @@ class BleakClientAndroid(BaseBleakClient):
                 services.add_characteristic(characteristic)
 
                 for descriptor_index, java_descriptor in enumerate(
-                    java_characteristic.getDescriptors()
+                    java_characteristic.getDescriptors().toArray()
                 ):
+                    assert isinstance(java_descriptor, defs.BluetoothGattDescriptor)
                     descriptor = BleakGATTDescriptor(
                         java_descriptor,
                         characteristic.handle + 1 + descriptor_index,
-                        self.obj.getUuid().toString(),
+                        java_descriptor.getUuid().toString(),
                         characteristic,
                     )
                     services.add_descriptor(descriptor)

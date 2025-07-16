@@ -1,4 +1,5 @@
 import asyncio
+from typing import TYPE_CHECKING
 
 from android.bluetooth import (
     BluetoothGatt,
@@ -9,7 +10,6 @@ from android.bluetooth import (
 )
 from java import Override, jarray, jbyte, jint, jvoid, static_proxy
 
-from bleak.backends.android.client import BleakClientAndroid
 from bleak.backends.android.client_callback import (
     OnCharacteristicReadCallback,
     OnCharacteristicReadResult,
@@ -27,11 +27,15 @@ from bleak.backends.android.dispatcher import CallbackDispatcher, EmptyCallbackR
 from bleak.backends.android.status import gatt_status_to_string
 from bleak.exc import BleakError
 
+if TYPE_CHECKING:
+    # Only for type checking. At runtime this results in an error.
+    from bleak.backends.android.client import BleakClientAndroid
+
 
 class _PythonBluetoothGattCallback(static_proxy(BluetoothGattCallback)):
     """Callback class for GattClient. PRIVATE."""
 
-    def __init__(self, client: BleakClientAndroid, loop: asyncio.AbstractEventLoop):
+    def __init__(self, client: "BleakClientAndroid", loop: asyncio.AbstractEventLoop):
         super(_PythonBluetoothGattCallback, self).__init__()
         self.java = self
         self._loop = loop

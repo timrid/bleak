@@ -1,16 +1,16 @@
 import asyncio
+from typing import TYPE_CHECKING
 
-from android.bluetooth.le import (
-    ScanCallback,
-    ScanResult,
-)
+from android.bluetooth.le import ScanCallback, ScanResult
 from java import Override, jint, jvoid, static_proxy
 
-from bleak.backends.android.dispatcher import (
-    CallbackDispatcher,
-)
+from bleak.backends.android.dispatcher import CallbackDispatcher
 from bleak.backends.android.scanner_callback import OnScanCallback, OnScanResult
 from bleak.backends.android.status import ScanFailed
+
+if TYPE_CHECKING:
+    # Only for type checking. At runtime this results in an error.
+    from bleak.backends.android.scanner import BleakScannerAndroid
 
 
 class _PythonScanCallback(static_proxy(ScanCallback)):
@@ -21,7 +21,7 @@ class _PythonScanCallback(static_proxy(ScanCallback)):
     It is not intended to call this class directly.
     """
 
-    def __init__(self, scanner, loop: asyncio.AbstractEventLoop):
+    def __init__(self, scanner: "BleakScannerAndroid", loop: asyncio.AbstractEventLoop):
         super(_PythonScanCallback, self).__init__()
         self._loop = loop
         self._scanner = scanner
