@@ -27,6 +27,15 @@ test_requires = [
     "requests",
 ]
 
+[tool.briefcase.app.bleak_example.macOS]
+universal_build = true
+requires = [
+    "toga-cocoa~=0.5.0",
+    "std-nslog~=1.0.3"
+   #  "../.."
+]
+min_os_version = "14.0"
+
 [tool.briefcase.app.bleak_example.windows]
 requires = [
     "toga-winforms~=0.5.0",
