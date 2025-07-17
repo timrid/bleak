@@ -4,6 +4,7 @@ import sys
 import warnings
 from typing import Literal, Optional
 
+from bleak.backends.android.dispatcher import dispatch_func
 from bleak.backends.android.scanner_callback import OnScanCallback
 
 if sys.version_info < (3, 11):
@@ -27,6 +28,9 @@ logger = logging.getLogger(__name__)
 
 # if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
 from bleak.backends.android.chaquopy import defs
+from bleak.backends.android.chaquopy.broadcast import (
+    _PythonBroadcastReceiver as BroadcastReceiver,
+)
 from bleak.backends.android.chaquopy.permissions import check_for_permissions
 from bleak.backends.android.chaquopy.scanner_callback import _PythonScanCallback
 
@@ -118,13 +122,12 @@ class BleakScannerAndroid(BaseBleakScanner):
             .setCallbackType(defs.ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
             .build()
         )
-        javascanner = self.__javascanner
-        callback = self.__callback
         scanfuture = self.__callback.dispatcher.perform_and_wait(
-            dispatch_api=lambda: javascanner.startScan(
+            dispatch_api=dispatch_func(
+                self.__javascanner.startScan,
                 filters,
                 scan_settings,
-                callback.java,
+                self.__callback.java,
             ),
             callback_api=OnScanCallback(),
             dispatch_result_indicates_status=False,
@@ -151,57 +154,12 @@ class BleakScannerAndroid(BaseBleakScanner):
                     "BT API gave SCAN_FAILED_APPLICATION_REGISTRATION_FAILED.  Resetting adapter."
                 )
 
-                def handlerWaitingForState(state, stateFuture):
-                    def handleAdapterStateChanged(context, intent):
-                        adapter_state = intent.getIntExtra(
-                            defs.BluetoothAdapter.EXTRA_STATE,
-                            defs.BluetoothAdapter.ERROR,
-                        )
-                        if adapter_state == defs.BluetoothAdapter.ERROR:
-                            loop.call_soon_threadsafe(
-                                stateOffFuture.set_exception,
-                                BleakError(f"Unexpected adapter state {adapter_state}"),
-                            )
-                        elif adapter_state == state:
-                            loop.call_soon_threadsafe(
-                                stateFuture.set_result, adapter_state
-                            )
-
-                    return handleAdapterStateChanged
-
                 logger.info(
-                    "disabling bluetooth adapter to handle SCAN_FAILED_APPLICATION_REGSTRATION_FAILED ..."
+                    "reset bluetooth adapter to handle SCAN_FAILED_APPLICATION_REGSTRATION_FAILED ..."
                 )
-                stateOffFuture = loop.create_future()
-                receiver = BroadcastReceiver(
-                    handlerWaitingForState(
-                        defs.BluetoothAdapter.STATE_OFF, stateOffFuture
-                    ),
-                    actions=[defs.BluetoothAdapter.ACTION_STATE_CHANGED],
-                )
-                receiver.start()
-                try:
-                    self.__adapter.disable()
-                    await stateOffFuture
-                finally:
-                    receiver.stop()
+                await reset_bluetooth_adapter(self.__adapter, loop)
 
-                logger.info("re-enabling bluetooth adapter ...")
-                stateOnFuture = loop.create_future()
-                receiver = BroadcastReceiver(
-                    handlerWaitingForState(
-                        defs.BluetoothAdapter.STATE_ON, stateOnFuture
-                    ),
-                    actions=[defs.BluetoothAdapter.ACTION_STATE_CHANGED],
-                )
-                receiver.start()
-                try:
-                    self.__adapter.enable()
-                    await stateOnFuture
-                finally:
-                    receiver.stop()
                 logger.debug("restarting scan ...")
-
                 return await self.start()
 
     @override
@@ -267,3 +225,49 @@ class BleakScannerAndroid(BaseBleakScanner):
         )
 
         self.call_detection_callbacks(device, advertisement)
+
+
+async def reset_bluetooth_adapter(
+    adapter: defs.BluetoothAdapter, loop: asyncio.AbstractEventLoop
+):
+    def handler_waiting_for_state(state: int, stateFuture: asyncio.Future):
+        def handle_adapter_state_changed(context, intent: defs.Intent):
+            adapter_state = intent.getIntExtra(
+                defs.BluetoothAdapter.EXTRA_STATE,
+                defs.BluetoothAdapter.ERROR,
+            )
+            if adapter_state == defs.BluetoothAdapter.ERROR:
+                loop.call_soon_threadsafe(
+                    stateFuture.set_exception,
+                    BleakError(f"Unexpected adapter state {adapter_state}"),
+                )
+            elif adapter_state == state:
+                loop.call_soon_threadsafe(stateFuture.set_result, adapter_state)
+
+        return handle_adapter_state_changed
+
+    logger.info("disabling bluetooth adapter ...")
+    state_off_future: asyncio.Future = loop.create_future()
+    receiver = BroadcastReceiver(
+        handler_waiting_for_state(defs.BluetoothAdapter.STATE_OFF, state_off_future),
+        actions=[defs.BluetoothAdapter.ACTION_STATE_CHANGED],
+    )
+    receiver.start()
+    try:
+        adapter.disable()
+        await state_off_future
+    finally:
+        receiver.stop()
+
+    logger.info("re-enabling bluetooth adapter ...")
+    state_on_future: asyncio.Future = loop.create_future()
+    receiver = BroadcastReceiver(
+        handler_waiting_for_state(defs.BluetoothAdapter.STATE_ON, state_on_future),
+        actions=[defs.BluetoothAdapter.ACTION_STATE_CHANGED],
+    )
+    receiver.start()
+    try:
+        adapter.enable()
+        await state_on_future
+    finally:
+        receiver.stop()

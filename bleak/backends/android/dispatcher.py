@@ -1,9 +1,15 @@
 import asyncio
 import dataclasses
 import logging
+import sys
 import warnings
 from typing import Any, Callable, Generic, TypeVar, overload
 
+if sys.version_info < (3, 12):
+    from typing_extensions import Buffer, ParamSpec, override
+else:
+    from collections.abc import Buffer
+    from typing import ParamSpec, override
 from bleak.exc import BleakError
 
 logger = logging.getLogger(__name__)
@@ -33,6 +39,19 @@ class CallbackApi(Generic[CallbackResultT]):
 class CallbackState:
     failure_str: str | None
     callback_result: CallbackResult
+
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def dispatch_func(
+    func: Callable[P, R], /, *args: P.args, **kwargs: P.kwargs
+) -> Callable[[], R]:
+    def newfunc():
+        return func(*args, **kwargs)
+
+    return newfunc
 
 
 class CallbackDispatcher:

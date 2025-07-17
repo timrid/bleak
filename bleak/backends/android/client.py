@@ -27,6 +27,7 @@ from bleak.backends.android.client_callback import (
     OnMtuChangedCallback,
     OnServicesDiscoveredCallback,
 )
+from bleak.backends.android.dispatcher import dispatch_func
 from bleak.backends.characteristic import BleakGATTCharacteristic
 from bleak.backends.client import BaseBleakClient, NotifyCallback
 from bleak.backends.descriptor import BleakGATTDescriptor
@@ -38,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 # if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
 from bleak.backends.android.chaquopy import defs
+from bleak.backends.android.chaquopy.broadcast import (
+    _PythonBroadcastReceiver as BroadcastReceiver,
+)
 from bleak.backends.android.chaquopy.client_callback import _PythonBluetoothGattCallback
 
 # elif os.environ.get("P4A_BOOTSTRAP") is not None:
@@ -73,6 +77,8 @@ class BleakClientAndroid(BaseBleakClient):
         self.__gatt: defs.BluetoothGatt | None = None
         self.__mtu: int = 23
 
+        self.__callbacks: _PythonBluetoothGattCallback | None = None
+
     # Connectivity methods
 
     @override
@@ -91,17 +97,18 @@ class BleakClientAndroid(BaseBleakClient):
 
         self.__device = self.__adapter.getRemoteDevice(self.address)
 
-        self.__callbacks = callbacks = _PythonBluetoothGattCallback(self, loop)
+        self.__callbacks = _PythonBluetoothGattCallback(self, loop)
 
         self._subscriptions: dict[int, NotifyCallback] = {}
 
         logger.debug(f"Connecting to BLE device @ {self.address}")
 
         self.__gatt, _ = await self.__callbacks.dispatcher.perform_and_wait(
-            dispatch_api=lambda: self.__device.connectGatt(
+            dispatch_api=dispatch_func(
+                self.__device.connectGatt,
                 defs.context,
                 False,
-                callbacks.java,
+                self.__callbacks.java,
                 defs.BluetoothDevice.TRANSPORT_LE,
             ),
             callback_api=OnConnectionStateChangeCallback(),
@@ -117,16 +124,15 @@ class BleakClientAndroid(BaseBleakClient):
             # unlike other backends, Android doesn't automatically negotiate
             # the MTU, so we request the largest size possible like BlueZ
             logger.debug("requesting mtu...")
-            gatt = self.__gatt
             result = await self.__callbacks.dispatcher.perform_and_wait(
-                dispatch_api=lambda: gatt.requestMtu(517),
+                dispatch_api=dispatch_func(self.__gatt.requestMtu, 517),
                 callback_api=OnMtuChangedCallback(),
             )
             self.__mtu = result.mtu
 
             logger.debug("discovering services...")
             await self.__callbacks.dispatcher.perform_and_wait(
-                dispatch_api=lambda: gatt.discoverServices(),
+                dispatch_api=dispatch_func(self.__gatt.discoverServices),
                 callback_api=OnServicesDiscoveredCallback(),
             )
 
@@ -154,9 +160,8 @@ class BleakClientAndroid(BaseBleakClient):
 
         # Try to disconnect the actual device/peripheral
         try:
-            gatt = self.__gatt
             await self.__callbacks.dispatcher.perform_and_wait(
-                dispatch_api=lambda: gatt.disconnect(),
+                dispatch_api=dispatch_func(self.__gatt.disconnect),
                 callback_api=OnConnectionStateChangeCallback(),
                 callback_expected_result=OnConnectionStateChangeResult(
                     defs.BluetoothProfile.STATE_DISCONNECTED
@@ -183,27 +188,27 @@ class BleakClientAndroid(BaseBleakClient):
         """
         loop = asyncio.get_running_loop()
 
-        bondedFuture = loop.create_future()
+        bonded_future = loop.create_future()
 
-        def handleBondStateChanged(context, intent):
+        def handle_bond_state_changed(context, intent: defs.Intent):
             bond_state = intent.getIntExtra(defs.BluetoothDevice.EXTRA_BOND_STATE, -1)
             if bond_state == -1:
                 loop.call_soon_threadsafe(
-                    bondedFuture.set_exception,
+                    bonded_future.set_exception,
                     BleakError(f"Unexpected bond state {bond_state}"),
                 )
             elif bond_state == defs.BluetoothDevice.BOND_NONE:
                 loop.call_soon_threadsafe(
-                    bondedFuture.set_exception,
+                    bonded_future.set_exception,
                     BleakError(
                         f"Device with address {self.address} could not be paired with."
                     ),
                 )
             elif bond_state == defs.BluetoothDevice.BOND_BONDED:
-                loop.call_soon_threadsafe(bondedFuture.set_result, True)
+                loop.call_soon_threadsafe(bonded_future.set_result, True)
 
         receiver = BroadcastReceiver(
-            handleBondStateChanged,
+            handle_bond_state_changed,
             actions=[defs.BluetoothDevice.ACTION_BOND_STATE_CHANGED],
         )
         receiver.start()
@@ -218,9 +223,9 @@ class BleakClientAndroid(BaseBleakClient):
                     raise BleakError(
                         f"Could not initiate bonding with device @ {self.address}"
                     )
-            await bondedFuture
+            await bonded_future
         finally:
-            await receiver.stop()
+            receiver.stop()
 
     @override
     async def unpair(self) -> None:
@@ -241,7 +246,9 @@ class BleakClientAndroid(BaseBleakClient):
         if self.__callbacks is None:
             return False
 
-        callback_state = self.__callbacks.states.get(OnConnectionStateChangeCallback())
+        callback_state = self.__callbacks.dispatcher.states.get(
+            OnConnectionStateChangeCallback()
+        )
         if callback_state is None:
             return False
 
@@ -335,9 +342,10 @@ class BleakClientAndroid(BaseBleakClient):
         assert self.__callbacks
         assert self.__gatt
 
-        gatt = self.__gatt
         callback_result = await self.__callbacks.dispatcher.perform_and_wait(
-            dispatch_api=lambda: gatt.readCharacteristic(characteristic.obj),
+            dispatch_api=dispatch_func(
+                self.__gatt.readCharacteristic, characteristic.obj
+            ),
             callback_api=OnCharacteristicReadCallback(characteristic.handle),
         )
         value = bytearray(callback_result.value)
@@ -361,9 +369,8 @@ class BleakClientAndroid(BaseBleakClient):
         assert self.__callbacks
         assert self.__gatt
 
-        gatt = self.__gatt
         callback_result = await self.__callbacks.dispatcher.perform_and_wait(
-            dispatch_api=lambda: gatt.readDescriptor(descriptor.obj),
+            dispatch_api=dispatch_func(self.__gatt.readDescriptor, descriptor.obj),
             callback_api=OnDescriptorReadCallback(uuid=descriptor.uuid),
         )
         value = bytearray(callback_result.value)
@@ -393,9 +400,10 @@ class BleakClientAndroid(BaseBleakClient):
 
         characteristic.obj.setValue(data)
 
-        gatt = self.__gatt
         await self.__callbacks.dispatcher.perform_and_wait(
-            dispatch_api=lambda: gatt.writeCharacteristic(characteristic.obj),
+            dispatch_api=dispatch_func(
+                self.__gatt.writeCharacteristic, characteristic.obj
+            ),
             callback_api=OnCharacteristicWriteCallback(
                 handle=characteristic.handle,
             ),
@@ -422,9 +430,8 @@ class BleakClientAndroid(BaseBleakClient):
 
         descriptor.obj.setValue(data)
 
-        gatt = self.__gatt
         await self.__callbacks.dispatcher.perform_and_wait(
-            dispatch_api=lambda: gatt.writeDescriptor(descriptor.obj),
+            dispatch_api=dispatch_func(self.__gatt.writeDescriptor, descriptor.obj),
             callback_api=OnDescriptorWriteCallback(uuid=descriptor.uuid),
         )
 

@@ -19,6 +19,7 @@ from android.bluetooth.le import (
 ScanSettingsBuilder = ScanSettings.Builder  # noqa: F401
 ScanFilterBuilder = ScanFilter.Builder  # noqa: F401
 
+from android.content import Intent  # noqa: F401, E402
 from android.os import ParcelUuid  # noqa: F401, E402
 from java.util import UUID, ArrayList, HashMap  # noqa: F401, E402
 from org.beeware.android import MainActivity  # noqa: F401, E402

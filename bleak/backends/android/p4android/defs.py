@@ -17,6 +17,7 @@ ScanResult = autoclass("android.bluetooth.le.ScanResult")
 ScanSettings = autoclass("android.bluetooth.le.ScanSettings")
 ScanSettingsBuilder = autoclass("android.bluetooth.le.ScanSettings$Builder")
 
+Intent = autoclass("android.content")
 ParcelUuid = autoclass("android.os.ParcelUuid")
 
 ArrayList = autoclass("java.util.ArrayList")
