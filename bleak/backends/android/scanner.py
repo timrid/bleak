@@ -5,6 +5,7 @@ import warnings
 from typing import Literal, Optional
 
 from bleak.backends.android.dispatcher import dispatch_func
+from bleak.backends.android.permissions import check_for_permissions
 from bleak.backends.android.scanner_callback import OnScanCallback
 
 if sys.version_info < (3, 11):
@@ -31,12 +32,10 @@ from bleak.backends.android.chaquopy import defs
 from bleak.backends.android.chaquopy.broadcast import (
     _PythonBroadcastReceiver as BroadcastReceiver,
 )
-from bleak.backends.android.chaquopy.permissions import check_for_permissions
 from bleak.backends.android.chaquopy.scanner_callback import _PythonScanCallback
 
 # elif os.environ.get("P4A_BOOTSTRAP") is not None:
 #     from bleak.backends.android.p4android import defs
-#     from bleak.backends.android.p4android.permissions import check_for_permissions
 #     from bleak.backends.android.p4android.client_cascanner_callbackllback import _PythonScanCallback
 # else:
 #     raise BleakError("No supported Android environment detected.")

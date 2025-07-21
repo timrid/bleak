@@ -1,37 +1,33 @@
-import asyncio
+from typing import Callable
 
-from android import Manifest
-from android.content.pm import PackageManager
-from android.os import Build
+from toga.app import App as TogaCoreApp
+from toga_android.app import App as TogaAndroidApp
 
-from bleak.backends.android.chaquopy.defs import activity
+from bleak.backends.android.chaquopy import defs
+from bleak.exc import BleakError
 
 
-async def check_for_permissions(loop: asyncio.AbstractEventLoop):
-    """Check for and request neccessary BLE permissions.
+def has_permission(permission: str) -> bool:
+    """Check if a permission is granted"""
+    result = defs.activity.checkSelfPermission(permission)
+    return result == defs.PackageManager.PERMISSION_GRANTED
 
-    This was a hard one. Hard to find which permissions are really
-    neccessary and especially WHICH ONE ARE NOT ALLOWED TO ASK FOR
-    AT THE SAME TIME.
-    BLUETOOTH and BLUETOOTH_ADMIN don't require runtime permission,
-    ACCESS_FINE_LOCATION does contain ACCESS_COARSE_LOCATION and
-    ACCESS_BACKGROUND_LOCATION (?).
-    """
-    api_level = Build.VERSION.SDK_INT
-    if api_level >= 23 and api_level <= 30:
-        permissions = [
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        ]
-    elif api_level > 30:
-        permissions = [
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT,
-        ]
-    else:
-        raise ValueError("unknown api level")
-    permissions_granted = all(
-        activity.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
-        for permission in permissions
+
+def _get_running_toga_android_app() -> TogaAndroidApp:
+    """Get the currently running toga app"""
+    app = TogaCoreApp.app
+    if app is None:
+        raise BleakError("No running toga app detected.")
+    if not isinstance(app._impl, TogaAndroidApp):
+        raise BleakError(f"'{app}' is an invalid app")
+    return app._impl
+
+
+def request_permissions(
+    permissions: list[str], callback: Callable[[list[str], list[int]], None]
+) -> None:
+    android_app = _get_running_toga_android_app()
+    android_app.request_permissions(
+        permissions,
+        on_complete=callback,
     )
-    if not permissions_granted:
-        activity.requestPermissions(permissions, 101)

@@ -82,6 +82,22 @@ class BleakDBusError(BleakError):
         return (name + " " + details) if details else name
 
 
+class BleakPermissionsDeniedError(BleakError):
+    """
+    Exception which is raised if a permission is requested but was denied by the user.
+    """
+
+    permissions: list[str]
+
+    def __init__(self, permissions: list[str]) -> None:
+        """
+        Args:
+            characteristic (str): handle or UUID of the characteristic which was not found
+        """
+        super().__init__(f"User denied access to {permissions}")
+        self.permissions = permissions
+
+
 CONTROLLER_ERROR_CODES = {
     0x00: "Success",
     0x01: "Unknown HCI Command",
