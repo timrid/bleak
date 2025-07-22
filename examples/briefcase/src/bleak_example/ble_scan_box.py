@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import traceback
 from typing import Any, Callable
 
 import toga
@@ -147,6 +148,7 @@ class BLEScanBox(toga.Box):
                 )
 
         except Exception as e:
+            traceback.print_exc()
             self.scan_results_view.append_exception(e)
         finally:
             self.scan_button.enabled = True
