@@ -1,14 +1,7 @@
-# if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
 import asyncio
 
-from bleak.backends.android.chaquopy import defs, permissions
-from bleak.exc import BleakError, BleakPermissionsDeniedError
-
-# elif os.environ.get("P4A_BOOTSTRAP") is not None:
-#     from bleak.backends.android.p4android import defs
-#     from bleak.backends.android.p4android.client_callback import _PythonBluetoothGattCallback
-# else:
-#     raise BleakError("No supported Android environment detected.")
+from bleak.backends.android.framework import defs, permissions
+from bleak.exc import BleakPermissionsDeniedError
 
 
 def _required_ble_permissions() -> list[str]:

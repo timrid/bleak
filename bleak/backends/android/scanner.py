@@ -4,10 +4,6 @@ import sys
 import warnings
 from typing import Literal, Optional
 
-from bleak.backends.android.dispatcher import dispatch_func
-from bleak.backends.android.permissions import check_for_permissions
-from bleak.backends.android.scanner_callback import OnScanCallback
-
 if sys.version_info < (3, 11):
     from async_timeout import timeout as async_timeout
 else:
@@ -18,6 +14,10 @@ if sys.version_info < (3, 12):
 else:
     from typing import override
 
+from bleak.backends.android.dispatcher import dispatch_func
+from bleak.backends.android.framework import broadcast, defs, scanner_callback
+from bleak.backends.android.permissions import check_for_permissions
+from bleak.backends.android.scanner_callback import OnScanCallback
 from bleak.backends.scanner import (
     AdvertisementData,
     AdvertisementDataCallback,
@@ -26,19 +26,6 @@ from bleak.backends.scanner import (
 from bleak.exc import BleakError
 
 logger = logging.getLogger(__name__)
-
-# if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
-from bleak.backends.android.chaquopy import defs
-from bleak.backends.android.chaquopy.broadcast import (
-    _PythonBroadcastReceiver as BroadcastReceiver,
-)
-from bleak.backends.android.chaquopy.scanner_callback import _PythonScanCallback
-
-# elif os.environ.get("P4A_BOOTSTRAP") is not None:
-#     from bleak.backends.android.p4android import defs
-#     from bleak.backends.android.p4android.client_cascanner_callbackllback import _PythonScanCallback
-# else:
-#     raise BleakError("No supported Android environment detected.")
 
 
 class BleakScannerAndroid(BaseBleakScanner):
@@ -87,7 +74,7 @@ class BleakScannerAndroid(BaseBleakScanner):
         loop = asyncio.get_running_loop()
 
         if self.__callback is None:
-            self.__callback = _PythonScanCallback(self, loop)
+            self.__callback = scanner_callback._PythonScanCallback(self, loop)
         if self.__javascanner is None:
             await check_for_permissions(loop)
             self.__adapter = defs.BluetoothAdapter.getDefaultAdapter()
@@ -230,7 +217,7 @@ async def reset_bluetooth_adapter(
     adapter: defs.BluetoothAdapter, loop: asyncio.AbstractEventLoop
 ):
     def handler_waiting_for_state(state: int, stateFuture: asyncio.Future):
-        def handle_adapter_state_changed(context, intent: defs.Intent):
+        def handle_adapter_state_changed(context: defs.Context, intent: defs.Intent):
             adapter_state = intent.getIntExtra(
                 defs.BluetoothAdapter.EXTRA_STATE,
                 defs.BluetoothAdapter.ERROR,
@@ -247,7 +234,7 @@ async def reset_bluetooth_adapter(
 
     logger.info("disabling bluetooth adapter ...")
     state_off_future: asyncio.Future = loop.create_future()
-    receiver = BroadcastReceiver(
+    receiver = broadcast.BroadcastReceiver(
         handler_waiting_for_state(defs.BluetoothAdapter.STATE_OFF, state_off_future),
         actions=[defs.BluetoothAdapter.ACTION_STATE_CHANGED],
     )
@@ -260,7 +247,7 @@ async def reset_bluetooth_adapter(
 
     logger.info("re-enabling bluetooth adapter ...")
     state_on_future: asyncio.Future = loop.create_future()
-    receiver = BroadcastReceiver(
+    receiver = broadcast.BroadcastReceiver(
         handler_waiting_for_state(defs.BluetoothAdapter.STATE_ON, state_on_future),
         actions=[defs.BluetoothAdapter.ACTION_STATE_CHANGED],
     )

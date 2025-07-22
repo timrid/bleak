@@ -1,14 +1,7 @@
 import enum
 
 import bleak.exc
-
-# if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
-from bleak.backends.android.chaquopy import defs
-
-# elif os.environ.get("P4A_BOOTSTRAP") is not None:
-#     from bleak.backends.android.p4android import defs
-# else:
-#     raise BleakError("No supported Android environment detected.")
+from bleak.backends.android.framework import defs
 
 
 class ScanFailed(enum.IntEnum):

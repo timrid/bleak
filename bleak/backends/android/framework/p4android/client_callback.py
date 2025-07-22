@@ -20,7 +20,7 @@ from bleak.backends.android.dispatcher import (
     CallbackDispatcher,
     EmptyCallbackResult,
 )
-from bleak.backends.android.p4android.defs import (
+from bleak.backends.android.framework.p4android.defs import (
     BluetoothProfile,
     PythonBluetoothGattCallback,
 )

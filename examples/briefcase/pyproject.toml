@@ -58,9 +58,9 @@ build_gradle_dependencies = [
 
 build_gradle_extra_content = """
 android.defaultConfig.python.staticProxy(
-    'bleak.backends.android.chaquopy.scanner_callback',
-    'bleak.backends.android.chaquopy.client_callback',
-    'bleak.backends.android.chaquopy.broadcast'
+    'bleak.backends.android.framework.chaquopy.scanner_callback',
+    'bleak.backends.android.framework.chaquopy.client_callback',
+    'bleak.backends.android.framework.chaquopy.broadcast'
 )
 """
 android_manifest_extra_content = """

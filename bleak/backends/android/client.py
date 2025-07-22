@@ -28,6 +28,11 @@ from bleak.backends.android.client_callback import (
     OnServicesDiscoveredCallback,
 )
 from bleak.backends.android.dispatcher import dispatch_func
+from bleak.backends.android.framework import (
+    broadcast,
+    client_callback,
+    defs,
+)
 from bleak.backends.characteristic import BleakGATTCharacteristic
 from bleak.backends.client import BaseBleakClient, NotifyCallback
 from bleak.backends.descriptor import BleakGATTDescriptor
@@ -36,19 +41,6 @@ from bleak.backends.service import BleakGATTService, BleakGATTServiceCollection
 from bleak.exc import BleakError
 
 logger = logging.getLogger(__name__)
-
-# if os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
-from bleak.backends.android.chaquopy import defs
-from bleak.backends.android.chaquopy.broadcast import (
-    _PythonBroadcastReceiver as BroadcastReceiver,
-)
-from bleak.backends.android.chaquopy.client_callback import _PythonBluetoothGattCallback
-
-# elif os.environ.get("P4A_BOOTSTRAP") is not None:
-#     from bleak.backends.android.p4android import defs
-#     from bleak.backends.android.p4android.client_callback import _PythonBluetoothGattCallback
-# else:
-#     raise BleakError("No supported Android environment detected.")
 
 
 class BleakClientAndroid(BaseBleakClient):
@@ -77,7 +69,7 @@ class BleakClientAndroid(BaseBleakClient):
         self.__gatt: defs.BluetoothGatt | None = None
         self.__mtu: int = 23
 
-        self.__callbacks: _PythonBluetoothGattCallback | None = None
+        self.__callbacks: client_callback._PythonBluetoothGattCallback | None = None
 
     # Connectivity methods
 
@@ -97,7 +89,7 @@ class BleakClientAndroid(BaseBleakClient):
 
         self.__device = self.__adapter.getRemoteDevice(self.address)
 
-        self.__callbacks = _PythonBluetoothGattCallback(self, loop)
+        self.__callbacks = client_callback._PythonBluetoothGattCallback(self, loop)
 
         self._subscriptions: dict[int, NotifyCallback] = {}
 
@@ -190,7 +182,7 @@ class BleakClientAndroid(BaseBleakClient):
 
         bonded_future = loop.create_future()
 
-        def handle_bond_state_changed(context, intent: defs.Intent):
+        def handle_bond_state_changed(context: defs.Context, intent: defs.Intent):
             bond_state = intent.getIntExtra(defs.BluetoothDevice.EXTRA_BOND_STATE, -1)
             if bond_state == -1:
                 loop.call_soon_threadsafe(
@@ -207,7 +199,7 @@ class BleakClientAndroid(BaseBleakClient):
             elif bond_state == defs.BluetoothDevice.BOND_BONDED:
                 loop.call_soon_threadsafe(bonded_future.set_result, True)
 
-        receiver = BroadcastReceiver(
+        receiver = broadcast.BroadcastReceiver(
             handle_bond_state_changed,
             actions=[defs.BluetoothDevice.ACTION_BOND_STATE_CHANGED],
         )

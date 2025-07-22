@@ -6,10 +6,10 @@ import warnings
 from typing import Any, Callable, Generic, TypeVar, overload
 
 if sys.version_info < (3, 12):
-    from typing_extensions import Buffer, ParamSpec, override
+    from typing_extensions import ParamSpec
 else:
-    from collections.abc import Buffer
-    from typing import ParamSpec, override
+    from typing import ParamSpec
+
 from bleak.exc import BleakError
 
 logger = logging.getLogger(__name__)

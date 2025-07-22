@@ -3,23 +3,24 @@
 
 from typing import Callable
 
-from android.content import BroadcastReceiver, Context, Intent, IntentFilter
+from android.content import BroadcastReceiver as _BroadcastReceiver
+from android.content import Context, Intent, IntentFilter
 from android.os import Handler, HandlerThread
 from java import Override, jvoid, static_proxy
 
-from bleak.backends.android.chaquopy.defs import context
+from bleak.backends.android.framework.chaquopy.defs import context
 
 
 # Copied BroadcastReceiver logic from python-for-android and adapted it to chaquopy.
 # See https://github.com/kivy/python-for-android/blob/6f3ab805972e0d9531e3a207a6bc51c0effd8eb9/pythonforandroid/recipes/android/src/android/broadcast.py
-class _PythonBroadcastReceiver(static_proxy(BroadcastReceiver)):
+class BroadcastReceiver(static_proxy(_BroadcastReceiver)):
     def __init__(
         self,
         callback: Callable[[Context, Intent], None],
         actions: list[str] | None = None,
         categories: list[str] | None = None,
     ):
-        super(_PythonBroadcastReceiver, self).__init__()
+        super(BroadcastReceiver, self).__init__()
         self.context = context
         self.callback = callback
 

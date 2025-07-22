@@ -53,6 +53,7 @@ class BleakRecipe(PythonRecipe):
             "bleak",
             "backends",
             "android",
+            "framework",
             "p4android",
             "java",
             ".",

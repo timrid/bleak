@@ -5,7 +5,7 @@ from jnius import PythonJavaClass, java_method  # type: ignore
 from bleak.backends.android.dispatcher import (
     CallbackDispatcher,
 )
-from bleak.backends.android.p4android.defs import (
+from bleak.backends.android.framework.p4android.defs import (
     PythonScanCallback,
 )
 from bleak.backends.android.scanner import BleakScannerAndroid

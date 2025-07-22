@@ -3,7 +3,7 @@ from typing import Callable
 from toga.app import App as TogaCoreApp
 from toga_android.app import App as TogaAndroidApp
 
-from bleak.backends.android.chaquopy import defs
+from bleak.backends.android.framework.chaquopy import defs
 from bleak.exc import BleakError
 
 
