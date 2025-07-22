@@ -26,7 +26,7 @@ class BleScannerApp(toga.App):
         main_window.content = main_box
 
         self.main_window = main_window
-        self.main_window.show()
+        main_window.show()
 
 
 def main():
