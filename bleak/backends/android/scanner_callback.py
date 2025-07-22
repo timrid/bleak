@@ -1,15 +1,19 @@
 import dataclasses
+from typing import TYPE_CHECKING
 
 from bleak.backends.android.dispatcher import (
     CallbackApi,
     CallbackResult,
 )
-from bleak.backends.android.framework.p4android import defs
+
+if TYPE_CHECKING:
+    # Only for type checking. At runtime this results in an error.
+    from bleak.backends.android.framework.framework import defs
 
 
 @dataclasses.dataclass
 class OnScanResult(CallbackResult):
-    result: None | defs.ScanResult
+    result: "None | defs.ScanResult"
 
 
 @dataclasses.dataclass(frozen=True)
