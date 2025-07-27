@@ -7,6 +7,7 @@ if os.environ.get("P4A_BOOTSTRAP") is not None:
         broadcast,  # noqa: F401
         client_callback,  # noqa: F401
         defs,  # noqa: F401
+        helper,  # noqa: F401
         permissions,  # noqa: F401
         scanner_callback,  # noqa: F401
     )
@@ -15,6 +16,7 @@ elif os.environ.get("CHAQUOPY_PROCESS_TYPE") is not None:
         broadcast,  # noqa: F401
         client_callback,  # noqa: F401
         defs,  # noqa: F401
+        helper,  # noqa: F401
         permissions,  # noqa: F401
         scanner_callback,  # noqa: F401
     )

@@ -15,7 +15,7 @@ else:
     from typing import override
 
 from bleak.backends.android.dispatcher import dispatch_func
-from bleak.backends.android.framework import broadcast, defs, scanner_callback
+from bleak.backends.android.framework import broadcast, defs, helper, scanner_callback
 from bleak.backends.android.permissions import check_for_permissions
 from bleak.backends.android.scanner_callback import OnScanCallback
 from bleak.backends.scanner import (
@@ -168,7 +168,10 @@ class BleakScannerAndroid(BaseBleakScanner):
         if service_uuids is None:
             service_uuids = []
         else:
-            service_uuids = [service_uuid.toString() for service_uuid in service_uuids]
+            service_uuids = [
+                service_uuid.toString()
+                for service_uuid in helper.iterate_java_obj(service_uuids)
+            ]
 
         if not self.is_allowed_uuid(service_uuids):
             return
@@ -179,12 +182,13 @@ class BleakScannerAndroid(BaseBleakScanner):
             for index in range(manufacturer_data.size())
         }
 
-        service_data = {}
-        temp_map = defs.HashMap(record.getServiceData())
-        service_data_iterator = temp_map.entrySet().iterator()
-        while service_data_iterator.hasNext():
-            element = service_data_iterator.next()
-            service_data[element.getKey().toString()] = bytes(element.getValue())
+        # "getServiceData()"" returns an "ArrayMap". An "ArrayMap" has no valid
+        # "entrySet()" Method. So we have to convert it to a HashMap first.
+        service_data = defs.HashMap(record.getServiceData())
+        service_data = {
+            entry.getKey().toString(): bytes(entry.getValue())
+            for entry in helper.iterate_java_obj(service_data.entrySet())
+        }
 
         tx_power = record.getTxPowerLevel()
 
