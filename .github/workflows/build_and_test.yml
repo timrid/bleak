@@ -18,6 +18,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["310", "311", "312", "313", "314"]
+    env:
+      FORCE_COLOR: "1"
     steps:
       - uses: actions/checkout@v4
 
