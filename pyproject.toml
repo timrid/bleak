@@ -57,7 +57,9 @@ test = [
     "pytest>=8.2.1,<9.0.0",
     "pytest-asyncio>=1.2.0,<2.0.0",
     "pytest-cov>=7.0.0,<8.0.0",
-    "bumble==0.0.226",
+    "pyserial >= 3.5", # needed for bumble
+    # "bumble==0.0.226",
+    "bumble @ git+https://github.com/zxzxwu/bumble.git@dependency",
 ]
 dev = [
     # wait for https://github.com/nat-n/poethepoet/pull/375 to be merged and released
@@ -90,7 +92,7 @@ packages = ["bleak", "tests", "examples"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
-exclude = ["**/.venv/**", "**/kivy/**", "**/recipes/**"]
+exclude = ["**/.venv/**", "**/kivy/**", "**/recipes/**", "**/.venvs/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -150,7 +152,7 @@ sequence = [
     "test-py314",
 ]
 
-[tool.poe.tasks.typecheck]
+[tool.poe.tasks.typecheck-old]
 help = "Run type checkers (mypy, pyright)"
 
 # We want always the latest version of pyright and mypy, to catch
@@ -161,6 +163,62 @@ sequence = [
     { cmd = "mypy", executor = { with = "mypy" } },
     { cmd = "pyright", executor = { with = "pyright" } },
 ]
+
+[tool.poe.tasks.typecheck-generic]
+sequence = [
+    # Create a fresh venv for type checking
+    { cmd = "uv venv ${venv_path} --clear --python ${python_version}", executor = "simple" },
+    
+    # Install all dependencies for the selected platform in the venv
+    { cmd = "uv sync --active --python-platform ${uv_python_platform}", env = { VIRTUAL_ENV = "${venv_path}" }, executor = "simple" },
+    
+    # The created venv has platform-specific dependencies that may not be runnable on the current
+    # platform, so we install mypy and in an isolated venv but point to the created venv.
+    { cmd = "mypy --python-executable ${venv_path}/bin/python --platform ${mypy_sys_platform}", executor = { with = "mypy"} },
+    { cmd = "pyright --pythonpath ${venv_path}/bin/python --pythonplatform ${pyright_pythonplatform}", executor = { with = "pyright"} },
+]
+args = [
+    { name = "python_version", positional = true },
+    { name = "venv_path", positional = true },
+    { name = "uv_python_platform", positional = true },
+    { name = "mypy_sys_platform", positional = true },
+    { name = "pyright_pythonplatform", positional = true },
+]
+
+[tool.poe.tasks.typecheck-windows]
+sequence = [
+    "typecheck-generic 3.10 .venvs/.venv-windows-310 windows windows Windows",
+    "typecheck-generic 3.11 .venvs/.venv-windows-311 windows windows Windows",
+    "typecheck-generic 3.12 .venvs/.venv-windows-312 windows windows Windows",
+    "typecheck-generic 3.13 .venvs/.venv-windows-313 windows windows Windows",
+    "typecheck-generic 3.14 .venvs/.venv-windows-314 windows windows Windows",
+]
+
+[tool.poe.tasks.typecheck-linux]
+sequence = [
+    "typecheck-generic 3.10 .venvs/.venv-linux-310 linux linux Linux",
+    "typecheck-generic 3.11 .venvs/.venv-linux-311 linux linux Linux",
+    "typecheck-generic 3.12 .venvs/.venv-linux-312 linux linux Linux",
+    "typecheck-generic 3.13 .venvs/.venv-linux-313 linux linux Linux",
+    "typecheck-generic 3.14 .venvs/.venv-linux-314 linux linux Linux",
+]
+
+[tool.poe.tasks.typecheck-macos]
+sequence = [
+    "typecheck-generic 3.10 .venvs/.venv-macos-310 macos macos Darwin",
+    "typecheck-generic 3.11 .venvs/.venv-macos-311 macos macos Darwin",
+    "typecheck-generic 3.12 .venvs/.venv-macos-312 macos macos Darwin",
+    "typecheck-generic 3.13 .venvs/.venv-macos-313 macos macos Darwin",
+    "typecheck-generic 3.14 .venvs/.venv-macos-314 macos macos Darwin",
+]
+
+[tool.poe.tasks.typecheck]
+sequence = [
+    "typecheck-windows",
+    "typecheck-linux",
+    "typecheck-macos",
+]
+
 
 [tool.poe.tasks.lint]
 help = "Run code linters (isort, black, flake8)"
